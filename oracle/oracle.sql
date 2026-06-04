@@ -59,3 +59,115 @@ CREATE TABLE RozliczeniaKurierskie (
     kwota_prowizji NUMBER(10, 2) NOT NULL,
     status_rozliczenia VARCHAR2(20) DEFAULT 'DO_REPOTU'
 );
+
+-- 4. Nadanie uprawnień do tabel
+-- Dla administratora - pełny dostęp do wszystkich tabel
+GRANT ALL PRIVILEGES ON Cennik TO role_admin;
+GRANT ALL PRIVILEGES ON Faktury TO role_admin;
+GRANT ALL PRIVILEGES ON Platnosci TO role_admin;
+GRANT ALL PRIVILEGES ON RozliczeniaKurierskie TO role_admin;
+
+-- Dla aplikacji - zapis i odczyt faktur oraz płatności
+GRANT SELECT, INSERT, UPDATE ON Faktury TO role_app;
+GRANT SELECT, INSERT, UPDATE ON Platnosci TO role_app;
+GRANT SELECT ON Cennik TO role_app;
+
+-- Dla SQL Server Linked Server (tylko odczyt)
+GRANT SELECT ON Cennik TO role_ro;
+GRANT SELECT ON Faktury TO role_ro;
+GRANT SELECT ON Platnosci TO role_ro;
+GRANT SELECT ON RozliczeniaKurierskie TO role_ro;
+
+-- Dla replikacji
+GRANT SELECT, INSERT, UPDATE, DELETE ON Cennik TO role_rep;
+GRANT SELECT, INSERT, UPDATE, DELETE ON Faktury TO role_rep;
+GRANT SELECT, INSERT, UPDATE, DELETE ON Platnosci TO role_rep;
+GRANT SELECT, INSERT, UPDATE, DELETE ON RozliczeniaKurierskie TO role_rep;
+
+-- Dla audytu (na razie odczyt z tabel, później z widoków)
+GRANT SELECT ON Cennik TO role_audit;
+GRANT SELECT ON Faktury TO role_audit;
+GRANT SELECT ON Platnosci TO role_audit;
+GRANT SELECT ON RozliczeniaKurierskie TO role_audit;
+
+-- 5. Database Linki (Symulacja danych rozproszonych w Oracle)
+-- Prywatny DB Link (używany przez COURIER_REP)
+CREATE DATABASE LINK hq_link_private
+   CONNECT TO COURIER_HQ_ADMIN IDENTIFIED BY "HQAdminPassword123!"
+   USING 'SQLSRV-HQ';
+
+-- Publiczny DB Link (do celów raportowych)
+CREATE PUBLIC DATABASE LINK hq_link_public
+   CONNECT TO COURIER_HQ_APP IDENTIFIED BY "HQAppPassword123!"
+   USING 'SQLSRV-HQ';
+
+-- 6. Widoki rozproszone
+-- Zakładamy, że poprzez hq_link_public możemy odczytać tabele Klienci z SQLSRV-HQ
+CREATE OR REPLACE VIEW vw_FakturyZKlientami AS
+SELECT 
+    f.id_faktury,
+    f.numer_faktury,
+    k.NazwaFirmy_ImieNazwisko AS nazwa_klienta,
+    f.kwota_brutto,
+    f.data_wystawienia
+FROM Faktury f
+JOIN Klienci@hq_link_public k ON f.id_klienta = k.IdKlienta;
+
+-- 7. Wyzwalacz INSTEAD OF do widoku rozproszonego
+CREATE OR REPLACE TRIGGER trg_vw_FakturyZKlientami_Insert
+INSTEAD OF INSERT ON vw_FakturyZKlientami
+FOR EACH ROW
+BEGIN
+    -- Wyzwalacz pozwala na dodanie faktury dla istniejącego klienta z poziomu widoku
+    INSERT INTO Faktury (numer_faktury, id_klienta, kwota_netto, kwota_vat, kwota_brutto, data_wystawienia)
+    VALUES (
+        :NEW.numer_faktury, 
+        -- Wyszukanie IdKlienta na zdalnym serwerze na podstawie przekazanej nazwy
+        (SELECT IdKlienta FROM Klienci@hq_link_public WHERE NazwaFirmy_ImieNazwisko = :NEW.nazwa_klienta),
+        ROUND(:NEW.kwota_brutto / 1.23, 2), -- Symulowany podział kwoty
+        ROUND(:NEW.kwota_brutto - (:NEW.kwota_brutto / 1.23), 2),
+        :NEW.kwota_brutto,
+        NVL(:NEW.data_wystawienia, SYSDATE)
+    );
+END;
+/
+
+-- 8. Procedury składowane (wystawianie faktur i rozliczenia)
+CREATE OR REPLACE PROCEDURE usp_WystawFakture (
+    p_id_klienta IN NUMBER,
+    p_numer_faktury IN VARCHAR2,
+    p_kwota_netto IN NUMBER,
+    p_kwota_vat IN NUMBER,
+    p_kwota_brutto IN NUMBER
+)
+AS
+BEGIN
+    INSERT INTO Faktury (numer_faktury, id_klienta, kwota_netto, kwota_vat, kwota_brutto)
+    VALUES (p_numer_faktury, p_id_klienta, p_kwota_netto, p_kwota_vat, p_kwota_brutto);
+    
+    COMMIT;
+EXCEPTION
+    WHEN OTHERS THEN
+        ROLLBACK;
+        RAISE_APPLICATION_ERROR(-20001, 'Błąd podczas wystawiania faktury: ' || SQLERRM);
+END usp_WystawFakture;
+/
+
+CREATE OR REPLACE PROCEDURE usp_RozliczKuriera (
+    p_id_kuriera IN NUMBER,
+    p_okres IN VARCHAR2,
+    p_kwota_prowizji IN NUMBER
+)
+AS
+BEGIN
+    INSERT INTO RozliczeniaKurierskie (id_kuriera, okres_rozliczeniowy, kwota_prowizji, status_rozliczenia)
+    VALUES (p_id_kuriera, p_okres, p_kwota_prowizji, 'ZATWIERDZONE');
+    
+    COMMIT;
+EXCEPTION
+    WHEN OTHERS THEN
+        ROLLBACK;
+        RAISE_APPLICATION_ERROR(-20002, 'Błąd podczas rozliczania kuriera: ' || SQLERRM);
+END usp_RozliczKuriera;
+/
+

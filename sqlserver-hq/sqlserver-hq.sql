@@ -24,7 +24,9 @@ GO
 
 EXEC sys.sp_addlinkedsrvlogin   
    @rmtsrvname = N'SQLSRV-REG',   
-   @useself = N'True';
+   @useself = N'False',
+   @rmtuser = N'LinkedServerLogin',
+   @rmtpassword = N'REGLinkedPassword123!';
 GO
 
 -- test polaczenia
