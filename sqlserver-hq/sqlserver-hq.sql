@@ -29,6 +29,11 @@ EXEC sys.sp_addlinkedsrvlogin
    @rmtpassword = N'REGLinkedPassword123!';
 GO
 
+-- Włączenie RPC i RPC Out dla SQLSRV-REG (wymagane do zdalnych procedur w transakcjach)
+EXEC sys.sp_serveroption @server=N'SQLSRV-REG', @optname=N'rpc', @optvalue=N'true';
+EXEC sys.sp_serveroption @server=N'SQLSRV-REG', @optname=N'rpc out', @optvalue=N'true';
+GO
+
 -- test polaczenia
 EXEC sys.sp_testlinkedserver N'SQLSRV-REG';
 GO
@@ -38,17 +43,60 @@ EXEC sys.sp_addlinkedserver
    @srvproduct = N'Oracle',   
    @provider = N'OraOLEDB.Oracle',   
    @datasrc = N''; 
+GO
 
-
+-- Mapowanie loginów lokalnych na zdalne w Oracle (polityka ról)
+-- 1. Mapowanie administratora na konto z pełnymi prawami
 EXEC sys.sp_addlinkedsrvlogin   
    @rmtsrvname = N'ORA-ACCT',   
-   @useself = N'False',   
+   @useself = N'False',
+   @locallogin = N'COURIER_HQ_ADMIN',
+   @rmtuser = N'COURIER_ADMIN',          
+   @rmtpassword = N'AdminSecure123!';  
+GO
+
+-- 2. Mapowanie aplikacji na konto z prawami zapisu/odczytu faktur
+EXEC sys.sp_addlinkedsrvlogin   
+   @rmtsrvname = N'ORA-ACCT',   
+   @useself = N'False',
+   @locallogin = N'COURIER_HQ_APP',
+   @rmtuser = N'COURIER_APP',          
+   @rmtpassword = N'AppSecure123!';  
+GO
+
+-- 3. Domyślne mapowanie dla pozostałych użytkowników (tylko do odczytu)
+EXEC sys.sp_addlinkedsrvlogin   
+   @rmtsrvname = N'ORA-ACCT',   
+   @useself = N'False',
+   @locallogin = NULL,   
    @rmtuser = N'COURIER_RO',          
    @rmtpassword = N'ROSecure123!';  
 GO
 
+-- Włączenie RPC i RPC Out dla ORA-ACCT (wymagane do zdalnego wywoływania PL/SQL)
+EXEC sys.sp_serveroption @server=N'ORA-ACCT', @optname=N'rpc', @optvalue=N'true';
+EXEC sys.sp_serveroption @server=N'ORA-ACCT', @optname=N'rpc out', @optvalue=N'true';
+GO
+
 -- Weryfikacja dostępności połączenia
 EXEC sys.sp_testlinkedserver N'ORA-ACCT';
+GO
+
+-- Dodanie serwera połączonego MS Access (ACC-LOCAL)
+EXEC sys.sp_addlinkedserver   
+   @server = N'ACC-LOCAL',   
+   @srvproduct = N'Access',   
+   @provider = N'Microsoft.ACE.OLEDB.12.0',   
+   @datasrc = N'C:\CourierSync\Database\LocalNadania.accdb';
+GO
+
+-- Dodanie serwera połączonego MS Excel (XLS-RAPORTY)
+EXEC sys.sp_addlinkedserver   
+   @server = N'XLS-RAPORTY',   
+   @srvproduct = N'Excel',   
+   @provider = N'Microsoft.ACE.OLEDB.12.0',   
+   @datasrc = N'C:\CourierSync\Reports\MonthlyReport.xlsx',
+   @provstr = N'Excel 12.0 XML;HDR=YES';
 GO
 
 USE WarszawaHQ;
@@ -101,6 +149,7 @@ CREATE TABLE Przesylki (
     IdKlientaNadawcy INT FOREIGN KEY REFERENCES Klienci(IdKlienta),
     IdKlientaOdbiorcy INT FOREIGN KEY REFERENCES Klienci(IdKlienta),
     TypPrzesylki VARCHAR(30) DEFAULT 'STANDARD',
+    Waga DECIMAL(10,2) NULL, -- Waga przesyłki używana do wyceny
     IdPrzesylkiOryginalnej INT FOREIGN KEY REFERENCES Przesylki(IdPrzesylki),
     WyliczonaOplata DECIMAL(10,2) NULL, -- Uzupełniane przez procedurę usp_WycenPrzesylke
     StatusPrzesylki VARCHAR(30)
