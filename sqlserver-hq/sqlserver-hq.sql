@@ -60,6 +60,14 @@ CREATE TABLE Oddzialy (
     Miasto VARCHAR(50) NOT NULL
 );
 
+-- Tabela: Sortownie
+CREATE TABLE Sortownie (
+    IdSortowni INT IDENTITY(1,1) PRIMARY KEY,
+    NazwaSortowni VARCHAR(100) NOT NULL,
+    KodSortowni VARCHAR(20) NOT NULL UNIQUE,
+    IdOddzialu INT FOREIGN KEY REFERENCES Oddzialy(IdOddzialu)
+);
+
 -- Tabela: Pracownicy
 CREATE TABLE Pracownicy (
     IdPracownika INT IDENTITY(1,1) PRIMARY KEY,
@@ -91,6 +99,9 @@ CREATE TABLE Przesylki (
     IdPrzesylki INT IDENTITY(1,1) PRIMARY KEY,
     IdZamowienia INT FOREIGN KEY REFERENCES Zamowienia(IdZamowienia),
     IdKlientaNadawcy INT FOREIGN KEY REFERENCES Klienci(IdKlienta),
+    IdKlientaOdbiorcy INT FOREIGN KEY REFERENCES Klienci(IdKlienta),
+    TypPrzesylki VARCHAR(30) DEFAULT 'STANDARD',
+    IdPrzesylkiOryginalnej INT FOREIGN KEY REFERENCES Przesylki(IdPrzesylki),
     WyliczonaOplata DECIMAL(10,2) NULL, -- Uzupełniane przez procedurę usp_WycenPrzesylke
     StatusPrzesylki VARCHAR(30)
 );
