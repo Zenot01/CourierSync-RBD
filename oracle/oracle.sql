@@ -230,3 +230,32 @@ EXCEPTION
 END usp_RozliczKuriera;
 /
 
+-- Procedura generowania raportów finansowych z obsługą błędów
+CREATE OR REPLACE PROCEDURE usp_GenerujRaportFinansowy (
+    p_data_od IN DATE,
+    p_data_do IN DATE,
+    p_suma_netto OUT NUMBER,
+    p_suma_brutto OUT NUMBER,
+    p_suma_platnosci OUT NUMBER
+)
+AS
+BEGIN
+    SELECT NVL(SUM(kwota_netto), 0), NVL(SUM(kwota_brutto), 0)
+    INTO p_suma_netto, p_suma_brutto
+    FROM Faktury
+    WHERE data_wystawienia BETWEEN p_data_od AND p_data_do;
+
+    SELECT NVL(SUM(kwota), 0)
+    INTO p_suma_platnosci
+    FROM Platnosci
+    WHERE data_platnosci BETWEEN p_data_od AND p_data_do;
+    
+EXCEPTION
+    WHEN OTHERS THEN
+        p_suma_netto := 0;
+        p_suma_brutto := 0;
+        p_suma_platnosci := 0;
+        RAISE_APPLICATION_ERROR(-20003, 'Błąd podczas generowania raportu finansowego: ' || SQLERRM);
+END usp_GenerujRaportFinansowy;
+/
+
