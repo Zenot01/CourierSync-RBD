@@ -111,7 +111,20 @@ SELECT
 FROM Faktury f
 JOIN Klienci@hq_link_public k ON f.id_klienta = k.IdKlienta;
 
--- 7. Wyzwalacz INSTEAD OF do widoku rozproszonego
+-- Zestawienie faktur i statusów przesyłek (łączone z centralą)
+CREATE OR REPLACE VIEW vw_FakturyStatusyPrzesylek AS
+SELECT 
+    f.id_faktury,
+    f.numer_faktury,
+    f.id_klienta,
+    f.id_przesylki,
+    f.kwota_brutto,
+    f.data_wystawienia,
+    p.StatusPrzesylki AS status_przesylki
+FROM Faktury f
+LEFT JOIN Przesylki@hq_link_public p ON f.id_przesylki = p.IdPrzesylki;
+
+-- 7. Wyzwalacze INSTEAD OF do widoków rozproszonych
 CREATE OR REPLACE TRIGGER trg_vw_FakturyZKlientami_Insert
 INSTEAD OF INSERT ON vw_FakturyZKlientami
 FOR EACH ROW
@@ -129,6 +142,53 @@ BEGIN
     );
 END;
 /
+
+-- Wyzwalacz INSTEAD OF INSERT do zestawienia faktur i statusów przesyłek
+CREATE OR REPLACE TRIGGER trg_vw_FakturyStatusy_Insert
+INSTEAD OF INSERT ON vw_FakturyStatusyPrzesylek
+FOR EACH ROW
+BEGIN
+    INSERT INTO Faktury (numer_faktury, id_klienta, id_przesylki, kwota_netto, kwota_vat, kwota_brutto, data_wystawienia)
+    VALUES (
+        :NEW.numer_faktury,
+        :NEW.id_klienta,
+        :NEW.id_przesylki,
+        ROUND(:NEW.kwota_brutto / 1.23, 2),
+        ROUND(:NEW.kwota_brutto - (:NEW.kwota_brutto / 1.23), 2),
+        :NEW.kwota_brutto,
+        NVL(:NEW.data_wystawienia, SYSDATE)
+    );
+END;
+/
+
+-- Wyzwalacz INSTEAD OF UPDATE do zestawienia faktur i statusów przesyłek
+CREATE OR REPLACE TRIGGER trg_vw_FakturyStatusy_Update
+INSTEAD OF UPDATE ON vw_FakturyStatusyPrzesylek
+FOR EACH ROW
+BEGIN
+    -- Modyfikacja danych finansowych lokalnie
+    UPDATE Faktury
+    SET 
+        id_klienta = :NEW.id_klienta,
+        id_przesylki = :NEW.id_przesylki,
+        kwota_brutto = :NEW.kwota_brutto,
+        kwota_netto = ROUND(:NEW.kwota_brutto / 1.23, 2),
+        kwota_vat = ROUND(:NEW.kwota_brutto - (:NEW.kwota_brutto / 1.23), 2),
+        data_wystawienia = :NEW.data_wystawienia
+    WHERE id_faktury = :OLD.id_faktury;
+    
+    -- Aktualizacja statusu przesyłki na serwerze zdalnym, jeśli uległ zmianie
+    IF :NEW.status_przesylki IS NOT NULL AND (:OLD.status_przesylki IS NULL OR :OLD.status_przesylki <> :NEW.status_przesylki) THEN
+        UPDATE Przesylki@hq_link_public
+        SET StatusPrzesylki = :NEW.status_przesylki
+        WHERE IdPrzesylki = :NEW.id_przesylki;
+    END IF;
+END;
+/
+
+-- Nadanie uprawnień do widoków dla roli audytu
+GRANT SELECT ON vw_FakturyZKlientami TO role_audit;
+GRANT SELECT ON vw_FakturyStatusyPrzesylek TO role_audit;
 
 -- 8. Procedury składowane (wystawianie faktur i rozliczenia)
 CREATE OR REPLACE PROCEDURE usp_WystawFakture (
