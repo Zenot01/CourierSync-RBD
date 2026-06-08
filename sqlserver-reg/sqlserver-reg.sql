@@ -66,3 +66,45 @@ CREATE TABLE ZdarzeniaLogistyczne (
 -- Unikalny indeks zapobiegający duplikatom
 CREATE UNIQUE INDEX UIDX_Zdarzenia_ZapobieganieDuplikatom 
 ON ZdarzeniaLogistyczne (IdPrzesylki, KodZdarzenia, DataZdarzenia);
+
+GO
+
+-- =========================================================================
+-- PROCEDURY SKŁADOWANE (KRAKÓW ODDZIAŁ REGIONALNY)
+-- =========================================================================
+
+-- =========================================================================
+-- 1. usp_ZapiszZdarzenieLogistyczne
+-- Zapisuje zdarzenie logistyczne w lokalnej bazie.
+-- Zabezpieczona przed duplikatem za pomocą warunku EXISTS.
+-- =========================================================================
+CREATE PROCEDURE usp_ZapiszZdarzenieLogistyczne
+    @IdPrzesylki INT,
+    @KodZdarzenia VARCHAR(20),
+    @IdKuriera INT,
+    @IdSortowni INT
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    -- Sprawdzenie, czy takie same zdarzenie już zostało zapisane w bieżącym dniu
+    -- w celu uniknięcia naruszenia unikalnego indeksu UIDX_Zdarzenia_ZapobieganieDuplikatom
+    IF NOT EXISTS (
+        SELECT 1 
+        FROM ZdarzeniaLogistyczne 
+        WHERE IdPrzesylki = @IdPrzesylki 
+          AND KodZdarzenia = @KodZdarzenia 
+          AND CAST(DataZdarzenia AS DATE) = CAST(GETDATE() AS DATE)
+    )
+    BEGIN
+        INSERT INTO ZdarzeniaLogistyczne (IdPrzesylki, KodZdarzenia, IdKuriera, IdSortowni, DataZdarzenia)
+        VALUES (@IdPrzesylki, @KodZdarzenia, @IdKuriera, @IdSortowni, GETDATE());
+        
+        PRINT 'Zapisano zdarzenie logistyczne: ' + @KodZdarzenia;
+    END
+    ELSE
+    BEGIN
+        PRINT 'Zdarzenie logistyczne: ' + @KodZdarzenia + ' już istnieje dla tej przesyłki dzisiaj. Pominięto.';
+    END
+END;
+GO
