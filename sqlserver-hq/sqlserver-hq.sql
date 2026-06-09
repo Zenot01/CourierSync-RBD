@@ -159,9 +159,16 @@ CREATE TABLE Przesylki (
     Waga DECIMAL(10,2) NULL, -- Waga przesyłki używana do wyceny
     IdPrzesylkiOryginalnej INT FOREIGN KEY REFERENCES Przesylki(IdPrzesylki),
     WyliczonaOplata DECIMAL(10,2) NULL, -- Uzupełniane przez procedurę usp_WycenPrzesylke
-    StatusPrzesylki VARCHAR(30)
+    StatusPrzesylki VARCHAR(30),
+    IdSortowniDocelowej INT FOREIGN KEY REFERENCES Sortownie(IdSortowni), -- Strefa/sortownia docelowa (wyznacza etap trasy kuriera)
+    IdKuriera INT NULL -- Kurier przypisany do doręczenia tej przesyłki
 );
 
+GO
+
+-- Indeks wspierający filtrowanie paczek do doręczenia wg kuriera i strefy docelowej
+CREATE INDEX IDX_Przesylki_StatusKurier
+    ON Przesylki (StatusPrzesylki, IdKuriera, IdSortowniDocelowej);
 GO
 
 -- =========================================================================
