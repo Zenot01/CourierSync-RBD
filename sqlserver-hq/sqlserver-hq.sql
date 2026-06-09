@@ -1,3 +1,10 @@
+-- Włączenie opcji Ad Hoc w celu możliwości użycia OPENROWSET
+EXEC sys.sp_configure 'show advanced options', 1;
+RECONFIGURE;
+EXEC sys.sp_configure 'Ad Hoc Distributed Queries', 1;
+RECONFIGURE;
+GO
+
 -- Warszawa
 CREATE LOGIN CentralAdminLogin WITH PASSWORD = 'HQAdminPassword123!';
 CREATE LOGIN AppCentralLogin WITH PASSWORD = 'HQAppPassword123!';
@@ -42,7 +49,7 @@ EXEC sys.sp_addlinkedserver
    @server = N'ORA-ACCT',   
    @srvproduct = N'Oracle',   
    @provider = N'OraOLEDB.Oracle',   
-   @datasrc = N''; 
+   @datasrc = N'XE'; 
 GO
 
 -- Mapowanie loginów lokalnych na zdalne w Oracle (polityka ról)
@@ -192,11 +199,11 @@ BEGIN
     DECLARE @CenaBazowa DECIMAL(10,2);
     DECLARE @CenaZaKg DECIMAL(10,2);
 
-    -- Pobranie cennika z Oracle za pomocą zapytań OPENQUERY
+    -- Pobranie cennika z Oracle za pomocą zapytania ad-hoc OPENROWSET
     SELECT TOP 1 
         @CenaBazowa = CAST(cena_bazowa AS DECIMAL(10,2)),
         @CenaZaKg = CAST(ISNULL(cena_za_kg, 0) AS DECIMAL(10,2))
-    FROM OPENQUERY([ORA-ACCT], 'SELECT nazwa_uslugi, cena_bazowa, cena_za_kg FROM Cennik')
+    FROM OPENROWSET('OraOLEDB.Oracle', 'XE';'COURIER_RO';'ROSecure123!', 'SELECT nazwa_uslugi, cena_bazowa, cena_za_kg FROM Cennik')
     WHERE UPPER(nazwa_uslugi) = UPPER(@TypPrzesylki);
 
     -- Obsługa przypadku braku dopasowania - pobranie ceny standardowej
@@ -205,7 +212,7 @@ BEGIN
         SELECT TOP 1 
             @CenaBazowa = CAST(cena_bazowa AS DECIMAL(10,2)),
             @CenaZaKg = CAST(ISNULL(cena_za_kg, 0) AS DECIMAL(10,2))
-        FROM OPENQUERY([ORA-ACCT], 'SELECT nazwa_uslugi, cena_bazowa, cena_za_kg FROM Cennik')
+        FROM OPENROWSET('OraOLEDB.Oracle', 'XE';'COURIER_RO';'ROSecure123!', 'SELECT nazwa_uslugi, cena_bazowa, cena_za_kg FROM Cennik')
         WHERE UPPER(nazwa_uslugi) = 'STANDARD';
     END
 
@@ -365,3 +372,30 @@ BEGIN
     END CATCH
 END;
 GO
+
+-- =========================================================================
+-- WIDOKI ROZPROSZONE (WIELODOSTĘP DO RÓŻNYCH ŹRÓDEŁ DANYCH - ORACLE, ACCESS, EXCEL)
+-- =========================================================================
+-- Widok integruje w jednym miejscu dane z centrali, faktury z Oracle,
+-- lokalne nadania z bazy Access oraz raporty miesięczne z Excela.
+-- =========================================================================
+CREATE VIEW vw_KonsolidacjaRaportu AS
+SELECT 
+    p.IdPrzesylki,
+    p.StatusPrzesylki,
+    p.WyliczonaOplata,
+    -- Dane z Oracle (Linked Server ORA-ACCT)
+    f.numer_faktury AS Oracle_NumerFaktury,
+    f.kwota_brutto AS Oracle_KwotaBrutto,
+    -- Dane z Access (Linked Server ACC-LOCAL)
+    a.IdNadania AS Access_IdNadania,
+    a.DataNadania AS Access_DataNadania,
+    -- Dane z Excela (Linked Server XLS-RAPORTY)
+    e.SumaDostaw AS Excel_SumaDostaw,
+    e.Miesiac AS Excel_Miesiac
+FROM Przesylki p
+LEFT JOIN [ORA-ACCT]..COURIER_RO.FAKTURY f ON p.IdPrzesylki = f.id_przesylki
+LEFT JOIN [ACC-LOCAL]...Nadania a ON p.IdKlientaNadawcy = a.IdKlienta
+LEFT JOIN [XLS-RAPORTY]...[Sheet1$] e ON e.Miesiac = CONVERT(VARCHAR(7), GETDATE(), 120);
+GO
+

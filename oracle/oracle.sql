@@ -203,11 +203,8 @@ AS
 BEGIN
     INSERT INTO Faktury (numer_faktury, id_klienta, id_przesylki, kwota_netto, kwota_vat, kwota_brutto)
     VALUES (p_numer_faktury, p_id_klienta, p_id_przesylki, p_kwota_netto, p_kwota_vat, p_kwota_brutto);
-    
-    COMMIT;
 EXCEPTION
     WHEN OTHERS THEN
-        ROLLBACK;
         RAISE_APPLICATION_ERROR(-20001, 'Błąd podczas wystawiania faktury: ' || SQLERRM);
 END usp_WystawFakture;
 /
@@ -221,11 +218,8 @@ AS
 BEGIN
     INSERT INTO RozliczeniaKurierskie (id_kuriera, okres_rozliczeniowy, kwota_prowizji, status_rozliczenia)
     VALUES (p_id_kuriera, p_okres, p_kwota_prowizji, 'ZATWIERDZONE');
-    
-    COMMIT;
 EXCEPTION
     WHEN OTHERS THEN
-        ROLLBACK;
         RAISE_APPLICATION_ERROR(-20002, 'Błąd podczas rozliczania kuriera: ' || SQLERRM);
 END usp_RozliczKuriera;
 /
