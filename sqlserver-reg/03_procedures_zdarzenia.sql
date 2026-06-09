@@ -10,7 +10,7 @@ GO
 -- Zapisuje zdarzenie logistyczne w lokalnej bazie.
 -- Zabezpieczona przed duplikatem za pomocą warunku EXISTS.
 -- =========================================================================
-CREATE PROCEDURE usp_ZapiszZdarzenieLogistyczne
+CREATE OR ALTER PROCEDURE usp_ZapiszZdarzenieLogistyczne
     @IdPrzesylki INT,
     @KodZdarzenia VARCHAR(20),
     @IdKuriera INT,

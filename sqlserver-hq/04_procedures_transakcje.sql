@@ -11,7 +11,7 @@ GO
 -- Aktualizuje status w centrali, rejestruje zdarzenie w oddziale
 -- oraz wystawia fakturę w Oracle.
 -- =========================================================================
-CREATE PROCEDURE usp_PotwierdzDoreczenie
+CREATE OR ALTER PROCEDURE usp_PotwierdzDoreczenie
     @IdPrzesylki INT,
     @IdKuriera INT
 AS

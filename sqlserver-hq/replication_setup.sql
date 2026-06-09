@@ -5,25 +5,48 @@
 USE [master];
 GO
 
--- 1. Włączenie Dystrybutora na serwerze lokalnym
-EXEC sp_adddistributor @distributor = @@SERVERNAME, @password = N'DistributorSecurePassword123!';
+-- Włączenie opcji Ad Hoc w celu możliwości użycia OPENROWSET w replikacji migawkowej
+EXEC sys.sp_configure 'show advanced options', 1;
+RECONFIGURE;
+EXEC sys.sp_configure 'Ad Hoc Distributed Queries', 1;
+RECONFIGURE;
 GO
 
--- Tworzenie bazy danych dystrybucji
-EXEC sp_adddistributiondb 
-    @database = N'distribution', 
-    @data_folder = N'C:\Program Files\Microsoft SQL Server\MSSQL.Data', 
-    @log_folder = N'C:\Program Files\Microsoft SQL Server\MSSQL.Log', 
-    @min_distretention = 0, 
-    @max_distretention = 72, 
-    @history_retent = 48;
+-- 1. Włączenie Dystrybutora na serwerze lokalnym tylko jeśli nie jest już skonfigurowany
+IF NOT EXISTS (SELECT * FROM sys.servers WHERE is_distributor = 1 AND name = @@SERVERNAME)
+BEGIN
+    EXEC sp_adddistributor @distributor = @@SERVERNAME, @password = N'DistributorSecurePassword123!';
+END
 GO
 
--- Konfiguracja wydawcy (Publisher)
-EXEC sp_adddistpublisher 
-    @publisher = @@SERVERNAME, 
-    @distribution_db = N'distribution', 
-    @security_mode = 1;
+-- Tworzenie bazy danych dystrybucji jeśli nie istnieje
+IF NOT EXISTS (SELECT * FROM sys.databases WHERE name = N'distribution')
+BEGIN
+    EXEC sp_adddistributiondb 
+        @database = N'distribution', 
+        @data_folder = N'C:\Program Files\Microsoft SQL Server\MSSQL.Data', 
+        @log_folder = N'C:\Program Files\Microsoft SQL Server\MSSQL.Log', 
+        @min_distretention = 0, 
+        @max_distretention = 72, 
+        @history_retent = 48;
+END
+GO
+
+-- Konfiguracja wydawcy (Publisher) z obsługą błędów istniejącego wydawcy
+BEGIN TRY
+    EXEC sp_adddistpublisher 
+        @publisher = @@SERVERNAME, 
+        @distribution_db = N'distribution', 
+        @security_mode = 1;
+END TRY
+BEGIN CATCH
+    -- Ignoruj błąd jeśli wydawca jest już skonfigurowany (błąd 14046 lub podobne)
+    IF ERROR_NUMBER() NOT IN (14046, 21151)
+    BEGIN
+        DECLARE @PublisherError NVARCHAR(4000) = ERROR_MESSAGE();
+        RAISERROR(@PublisherError, 16, 1);
+    END
+END
 GO
 
 -- 2. Włączenie replikacji dla bazy danych WarszawaHQ
@@ -41,120 +64,137 @@ GO
 -- Synchronizuje tabele: Klienci, Zamowienia, Przesylki na bieżąco
 -- =========================================================================
 
--- Dodanie publikacji transakcyjnej
-EXEC sp_addpublication 
-    @publication = N'Pub_KlienciZamowieniaPrzesylki', 
-    @description = N'Replikacja transakcyjna klientów i paczek do oddziału regionalnego', 
-    @sync_method = N'concurrent', 
-    @retention = 336, 
-    @allow_push = N'true', 
-    @allow_pull = N'false', 
-    @allow_anonymous = N'false', 
-    @enabled_for_internet = N'false', 
-    @snapshot_in_defaultfolder = N'true', 
-    @compress_snapshot = N'false', 
-    @ftp_address = NULL, 
-    @ftp_port = 21, 
-    @ftp_subdirectory = NULL, 
-    @ftp_login = N'anonymous', 
-    @ftp_password = NULL, 
-    @invalidate_gi = 1, 
-    @status = N'active';
+-- Dodanie publikacji transakcyjnej tylko jeśli nie istnieje
+IF NOT EXISTS (SELECT * FROM syspublications WHERE name = N'Pub_KlienciZamowieniaPrzesylki')
+BEGIN
+    EXEC sp_addpublication 
+        @publication = N'Pub_KlienciZamowieniaPrzesylki', 
+        @description = N'Replikacja transakcyjna klientów i paczek do oddziału regionalnego', 
+        @sync_method = N'concurrent', 
+        @retention = 336, 
+        @allow_push = N'true', 
+        @allow_pull = N'false', 
+        @allow_anonymous = N'false', 
+        @enabled_for_internet = N'false', 
+        @snapshot_in_defaultfolder = N'true', 
+        @compress_snapshot = N'false', 
+        @ftp_address = NULL, 
+        @ftp_port = 21, 
+        @ftp_subdirectory = NULL, 
+        @ftp_login = N'anonymous', 
+        @ftp_password = NULL, 
+        @invalidate_gi = 1, 
+        @status = N'active';
+
+    -- Konfiguracja agenta snapshot dla publikacji
+    EXEC sp_addpublication_snapshot 
+        @publication = N'Pub_KlienciZamowieniaPrzesylki', 
+        @frequency_type = 1, 
+        @frequency_interval = 1, 
+        @frequency_relative_interval = 1, 
+        @frequency_recurrence_factor = 0, 
+        @frequency_subday = 1, 
+        @frequency_subday_interval = 0, 
+        @active_start_time_of_day = 0, 
+        @active_end_time_of_day = 235959, 
+        @active_start_date = 0, 
+        @active_end_date = 99991231, 
+        @snapshot_job_owner = NULL;
+END
 GO
 
--- Konfiguracja agenta snapshot dla publikacji
-EXEC sp_addpublication_snapshot 
-    @publication = N'Pub_KlienciZamowieniaPrzesylki', 
-    @frequency_type = 1, 
-    @frequency_interval = 1, 
-    @frequency_relative_interval = 1, 
-    @frequency_recurrence_factor = 0, 
-    @frequency_subday = 1, 
-    @frequency_subday_interval = 0, 
-    @active_start_time_of_day = 0, 
-    @active_end_time_of_day = 235959, 
-    @active_start_date = 0, 
-    @active_end_date = 99991231, 
-    @snapshot_job_owner = NULL;
+-- Dodanie artykułów (tabel) do publikacji tylko jeśli nie istnieją w publikacji
+IF NOT EXISTS (SELECT * FROM sysarticles WHERE name = N'Klienci')
+BEGIN
+    EXEC sp_addarticle 
+        @publication = N'Pub_KlienciZamowieniaPrzesylki', 
+        @article = N'Klienci', 
+        @source_owner = N'dbo', 
+        @source_object = N'Klienci', 
+        @type = N'logbased', 
+        @description = N'Tabela Klienci', 
+        @creation_script = NULL, 
+        @pre_creation_cmd = N'drop', 
+        @schema_option = 0x000000000803509F, 
+        @destination_table = N'Klienci', 
+        @destination_owner = N'dbo', 
+        @status = 24;
+END
 GO
 
--- Dodanie artykułów (tabel) do publikacji
--- Artykuł 1: Klienci
-EXEC sp_addarticle 
-    @publication = N'Pub_KlienciZamowieniaPrzesylki', 
-    @article = N'Klienci', 
-    @source_owner = N'dbo', 
-    @source_object = N'Klienci', 
-    @type = N'logbased', 
-    @description = N'Tabela Klienci', 
-    @creation_script = NULL, 
-    @pre_creation_cmd = N'drop', 
-    @schema_option = 0x000000000803509F, 
-    @destination_table = N'Klienci', 
-    @destination_owner = N'dbo', 
-    @status = 24;
+IF NOT EXISTS (SELECT * FROM sysarticles WHERE name = N'Zamowienia')
+BEGIN
+    EXEC sp_addarticle 
+        @publication = N'Pub_KlienciZamowieniaPrzesylki', 
+        @article = N'Zamowienia', 
+        @source_owner = N'dbo', 
+        @source_object = N'Zamowienia', 
+        @type = N'logbased', 
+        @description = N'Tabela Zamowienia', 
+        @creation_script = NULL, 
+        @pre_creation_cmd = N'drop', 
+        @schema_option = 0x000000000803509F, 
+        @destination_table = N'Zamowienia', 
+        @destination_owner = N'dbo', 
+        @status = 24;
+END
 GO
 
--- Artykuł 2: Zamowienia
-EXEC sp_addarticle 
-    @publication = N'Pub_KlienciZamowieniaPrzesylki', 
-    @article = N'Zamowienia', 
-    @source_owner = N'dbo', 
-    @source_object = N'Zamowienia', 
-    @type = N'logbased', 
-    @description = N'Tabela Zamowienia', 
-    @creation_script = NULL, 
-    @pre_creation_cmd = N'drop', 
-    @schema_option = 0x000000000803509F, 
-    @destination_table = N'Zamowienia', 
-    @destination_owner = N'dbo', 
-    @status = 24;
+IF NOT EXISTS (SELECT * FROM sysarticles WHERE name = N'Przesylki')
+BEGIN
+    EXEC sp_addarticle 
+        @publication = N'Pub_KlienciZamowieniaPrzesylki', 
+        @article = N'Przesylki', 
+        @source_owner = N'dbo', 
+        @source_object = N'Przesylki', 
+        @type = N'logbased', 
+        @description = N'Tabela Przesylki', 
+        @creation_script = NULL, 
+        @pre_creation_cmd = N'drop', 
+        @schema_option = 0x000000000803509F, 
+        @destination_table = N'Przesylki', 
+        @destination_owner = N'dbo', 
+        @status = 24;
+END
 GO
 
--- Artykuł 3: Przesylki
-EXEC sp_addarticle 
-    @publication = N'Pub_KlienciZamowieniaPrzesylki', 
-    @article = N'Przesylki', 
-    @source_owner = N'dbo', 
-    @source_object = N'Przesylki', 
-    @type = N'logbased', 
-    @description = N'Tabela Przesylki', 
-    @creation_script = NULL, 
-    @pre_creation_cmd = N'drop', 
-    @schema_option = 0x000000000803509F, 
-    @destination_table = N'Przesylki', 
-    @destination_owner = N'dbo', 
-    @status = 24;
-GO
+-- Dodanie subskrypcji typu Push tylko jeśli nie istnieje
+BEGIN TRY
+    EXEC sp_addsubscription 
+        @publication = N'Pub_KlienciZamowieniaPrzesylki', 
+        @subscriber = N'SQLSRV-REG', 
+        @destination_db = N'KrakowHQ', 
+        @subscription_type = N'Push', 
+        @sync_type = N'automatic', 
+        @article = N'all', 
+        @update_mode = N'read only', 
+        @subscriber_type = 0;
 
--- Dodanie subskrypcji typu Push (dla SQLSRV-REG / KrakowHQ)
-EXEC sp_addsubscription 
-    @publication = N'Pub_KlienciZamowieniaPrzesylki', 
-    @subscriber = N'SQLSRV-REG', 
-    @destination_db = N'KrakowHQ', 
-    @subscription_type = N'Push', 
-    @sync_type = N'automatic', 
-    @article = N'all', 
-    @update_mode = N'read only', 
-    @subscriber_type = 0;
-GO
-
--- Konfiguracja agenta dystrybucji na serwerze regionalnym
-EXEC sp_addpushsubscription_agent 
-    @publication = N'Pub_KlienciZamowieniaPrzesylki', 
-    @subscriber = N'SQLSRV-REG', 
-    @subscriber_db = N'KrakowHQ', 
-    @subscriber_security_mode = 1, -- Zintegrowane uwierzytelnianie
-    @frequency_type = 64, -- Praca ciągła
-    @frequency_interval = 0, 
-    @frequency_relative_interval = 0, 
-    @frequency_recurrence_factor = 0, 
-    @frequency_subday = 0, 
-    @frequency_subday_interval = 0, 
-    @active_start_time_of_day = 0, 
-    @active_end_time_of_day = 235959, 
-    @active_start_date = 0, 
-    @active_end_date = 99991231;
+    -- Konfiguracja agenta dystrybucji na serwerze regionalnym
+    EXEC sp_addpushsubscription_agent 
+        @publication = N'Pub_KlienciZamowieniaPrzesylki', 
+        @subscriber = N'SQLSRV-REG', 
+        @subscriber_db = N'KrakowHQ', 
+        @subscriber_security_mode = 1, -- Zintegrowane uwierzytelnianie
+        @frequency_type = 64, -- Praca ciągła
+        @frequency_interval = 0, 
+        @frequency_relative_interval = 0, 
+        @frequency_recurrence_factor = 0, 
+        @frequency_subday = 0, 
+        @frequency_subday_interval = 0, 
+        @active_start_time_of_day = 0, 
+        @active_end_time_of_day = 235959, 
+        @active_start_date = 0, 
+        @active_end_date = 99991231;
+END TRY
+BEGIN CATCH
+    -- Ignoruj błąd jeśli subskrypcja/agent już istnieje (błędy 14013, 14058, 20026 itp.)
+    IF ERROR_NUMBER() NOT IN (14013, 14058, 20026)
+    BEGIN
+        DECLARE @SubError NVARCHAR(4000) = ERROR_MESSAGE();
+        RAISERROR(@SubError, 16, 1);
+    END
+END
 GO
 
 
@@ -164,17 +204,20 @@ GO
 -- =========================================================================
 
 -- 1. Utworzenie lokalnej tabeli repliki cennika w centrali
-CREATE TABLE Cennik_Replica (
-    id_uslugi INT PRIMARY KEY,
-    nazwa_uslugi VARCHAR(100) NOT NULL,
-    cena_bazowa DECIMAL(10, 2) NOT NULL,
-    cena_za_kg DECIMAL(10, 2) NULL,
-    OstatniaAktualizacja DATETIME DEFAULT GETDATE()
-);
+IF OBJECT_ID('dbo.Cennik_Replica', 'U') IS NULL
+BEGIN
+    CREATE TABLE Cennik_Replica (
+        id_uslugi INT PRIMARY KEY,
+        nazwa_uslugi VARCHAR(100) NOT NULL,
+        cena_bazowa DECIMAL(10, 2) NOT NULL,
+        cena_za_kg DECIMAL(10, 2) NULL,
+        OstatniaAktualizacja DATETIME DEFAULT GETDATE()
+    );
+END
 GO
 
 -- 2. Stworzenie procedury synchronizacji (Snapshot) cennika z Oracle do SQL Server
-CREATE PROCEDURE usp_SynchronizujCennikOracle
+CREATE OR ALTER PROCEDURE usp_SynchronizujCennikOracle
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -203,6 +246,13 @@ GO
 
 -- 3. Konfiguracja cyklicznego SQL Server Agent Joba (uruchamianego raz na dobę)
 USE [msdb];
+GO
+
+-- Usuwanie istniejącego Joba w celu idempotentności
+IF EXISTS (SELECT job_id FROM sysjobs WHERE name = N'Replikacja_Cennika_Oracle_Snapshot')
+BEGIN
+    EXEC dbo.sp_delete_job @job_name = N'Replikacja_Cennika_Oracle_Snapshot';
+END
 GO
 
 -- Dodanie Joba

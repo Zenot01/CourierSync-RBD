@@ -25,6 +25,25 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON RozliczeniaKurierskie TO role_rep;
 -- Dla audytu (dostęp wyłącznie do widoków raportowych)
 
 -- 5. Database Linki (Symulacja danych rozproszonych w Oracle)
+-- Usunięcie istniejących Database Linków w celu uniknięcia konfliktów
+DECLARE
+  PROCEDURE safe_drop_db_link(p_link IN VARCHAR2, p_is_public IN BOOLEAN) IS
+  BEGIN
+    IF p_is_public THEN
+      EXECUTE IMMEDIATE 'DROP PUBLIC DATABASE LINK ' || p_link;
+    ELSE
+      EXECUTE IMMEDIATE 'DROP DATABASE LINK ' || p_link;
+    END IF;
+  EXCEPTION
+    WHEN OTHERS THEN
+      IF SQLCODE != -2024 THEN RAISE; END IF;
+  END;
+BEGIN
+  safe_drop_db_link('hq_link_private', FALSE);
+  safe_drop_db_link('hq_link_public', TRUE);
+END;
+/
+
 -- Prywatny DB Link (używany przez COURIER_REP)
 CREATE DATABASE LINK hq_link_private
    CONNECT TO CentralAdminLogin IDENTIFIED BY "HQAdminPassword123!"

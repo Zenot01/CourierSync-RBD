@@ -11,7 +11,7 @@ GO
 -- oblicza opłatę na podstawie typu przesyłki oraz wagi,
 -- i zapisuje ją w tabeli lokalnej.
 -- =========================================================================
-CREATE PROCEDURE usp_WycenPrzesylke
+CREATE OR ALTER PROCEDURE usp_WycenPrzesylke
     @IdPrzesylki INT
 AS
 BEGIN
@@ -71,7 +71,7 @@ GO
 -- i wstawia nowe rekordy, oznaczając zaimportowane w Access jako Zaimportowane = 1.
 -- Posiada obsługę błędów na wypadek braku dostępności Access.
 -- =========================================================================
-CREATE PROCEDURE usp_OdswiezRaportXLS
+CREATE OR ALTER PROCEDURE usp_OdswiezRaportXLS
     @DataGraniczna DATETIME = NULL
 AS
 BEGIN

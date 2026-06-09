@@ -15,7 +15,7 @@ GO
 --      - Paczki z PIERWSZEGO przystanku trasy → załadowane JAKO OSTATNIE → sektor PRZÓD
 --   5. Zwraca gotowy manifest jako wynik SELECT.
 -- =========================================================================
-CREATE PROCEDURE usp_OptymalizujTrase
+CREATE OR ALTER PROCEDURE usp_OptymalizujTrase
     @IdKuriera INT
 AS
 BEGIN

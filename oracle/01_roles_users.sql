@@ -1,4 +1,38 @@
 -- Oracle Cennik
+-- Usunięcie istniejących użytkowników i ról w celu uniknięcia konfliktów
+DECLARE
+  PROCEDURE safe_drop_role(p_role IN VARCHAR2) IS
+  BEGIN
+    EXECUTE IMMEDIATE 'DROP ROLE ' || p_role;
+  EXCEPTION
+    WHEN OTHERS THEN
+      IF SQLCODE != -1919 THEN RAISE; END IF;
+  END;
+
+  PROCEDURE safe_drop_user(p_user IN VARCHAR2) IS
+  BEGIN
+    EXECUTE IMMEDIATE 'DROP USER ' || p_user || ' CASCADE';
+  EXCEPTION
+    WHEN OTHERS THEN
+      IF SQLCODE != -1918 THEN RAISE; END IF;
+  END;
+BEGIN
+  -- Usuwanie użytkowników
+  safe_drop_user('COURIER_ADMIN');
+  safe_drop_user('COURIER_APP');
+  safe_drop_user('COURIER_RO');
+  safe_drop_user('COURIER_REP');
+  safe_drop_user('COURIER_AUDIT');
+
+  -- Usuwanie ról
+  safe_drop_role('role_admin');
+  safe_drop_role('role_app');
+  safe_drop_role('role_ro');
+  safe_drop_role('role_rep');
+  safe_drop_role('role_audit');
+END;
+/
+
 -- 1. Tworzenie Ról
 CREATE ROLE role_admin;
 CREATE ROLE role_app;

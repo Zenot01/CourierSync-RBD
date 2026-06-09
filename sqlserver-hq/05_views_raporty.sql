@@ -7,7 +7,7 @@ GO
 -- Widok integruje w jednym miejscu dane z centrali, faktury z Oracle,
 -- lokalne nadania z bazy Access oraz raporty miesięczne z Excela.
 -- =========================================================================
-CREATE VIEW vw_KonsolidacjaRaportu AS
+CREATE OR ALTER VIEW vw_KonsolidacjaRaportu AS
 SELECT 
     p.IdPrzesylki,
     p.StatusPrzesylki,
@@ -34,7 +34,7 @@ GO
 -- Wykorzystuje funkcje agregujące oraz jawne rzutowanie typów (CAST) w celu
 -- ujednolicenia typów danych pochodzących z różnych sterowników.
 -- =========================================================================
-CREATE PROCEDURE usp_GenerujRaportKonsolidacyjny
+CREATE OR ALTER PROCEDURE usp_GenerujRaportKonsolidacyjny
     @DataOd DATETIME,
     @DataDo DATETIME
 AS
