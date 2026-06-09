@@ -75,7 +75,7 @@ BEGIN
             @IdPrzesylki = @IdPrzesylki,
             @KodZdarzenia = 'DORECZONO',
             @IdKuriera = @IdKuriera,
-            @IdSortowni = @IdSortowni;
+            @Lokalizacja = @IdSortowni;
 
         -- Krok C: Wystawienie faktury w Oracle przez RPC i Linked Server
         DECLARE @Sql NVARCHAR(MAX) = N'BEGIN COURIER_ADMIN.usp_WystawFakture(?, ?, ?, ?, ?, ?); END;';

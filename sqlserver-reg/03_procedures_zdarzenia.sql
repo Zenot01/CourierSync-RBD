@@ -14,7 +14,7 @@ CREATE PROCEDURE usp_ZapiszZdarzenieLogistyczne
     @IdPrzesylki INT,
     @KodZdarzenia VARCHAR(20),
     @IdKuriera INT,
-    @IdSortowni INT
+    @Lokalizacja INT
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -30,7 +30,7 @@ BEGIN
     )
     BEGIN
         INSERT INTO ZdarzeniaLogistyczne (IdPrzesylki, KodZdarzenia, IdKuriera, IdSortowni, DataZdarzenia)
-        VALUES (@IdPrzesylki, @KodZdarzenia, @IdKuriera, @IdSortowni, GETDATE());
+        VALUES (@IdPrzesylki, @KodZdarzenia, @IdKuriera, @Lokalizacja, GETDATE());
         
         PRINT 'Zapisano zdarzenie logistyczne: ' + @KodZdarzenia;
     END

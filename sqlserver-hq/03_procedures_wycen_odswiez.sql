@@ -36,20 +36,20 @@ BEGIN
     DECLARE @CenaBazowa DECIMAL(10,2);
     DECLARE @CenaZaKg DECIMAL(10,2);
 
-    -- Pobranie cennika z Oracle za pomocą zapytania ad-hoc OPENROWSET
+    -- Pobranie cennika z lokalnej tabeli repliki (Cennik_Replica)
     SELECT TOP 1 
-        @CenaBazowa = CAST(cena_bazowa AS DECIMAL(10,2)),
-        @CenaZaKg = CAST(ISNULL(cena_za_kg, 0) AS DECIMAL(10,2))
-    FROM OPENROWSET('OraOLEDB.Oracle', 'XE';'COURIER_RO';'ROSecure123!', 'SELECT nazwa_uslugi, cena_bazowa, cena_za_kg FROM COURIER_ADMIN.Cennik')
+        @CenaBazowa = cena_bazowa,
+        @CenaZaKg = ISNULL(cena_za_kg, 0)
+    FROM Cennik_Replica
     WHERE UPPER(nazwa_uslugi) = UPPER(@TypPrzesylki);
 
     -- Obsługa przypadku braku dopasowania - pobranie ceny standardowej
     IF @CenaBazowa IS NULL
     BEGIN
         SELECT TOP 1 
-            @CenaBazowa = CAST(cena_bazowa AS DECIMAL(10,2)),
-            @CenaZaKg = CAST(ISNULL(cena_za_kg, 0) AS DECIMAL(10,2))
-        FROM OPENROWSET('OraOLEDB.Oracle', 'XE';'COURIER_RO';'ROSecure123!', 'SELECT nazwa_uslugi, cena_bazowa, cena_za_kg FROM COURIER_ADMIN.Cennik')
+            @CenaBazowa = cena_bazowa,
+            @CenaZaKg = ISNULL(cena_za_kg, 0)
+        FROM Cennik_Replica
         WHERE UPPER(nazwa_uslugi) = 'STANDARD';
     END
 
