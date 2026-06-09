@@ -399,3 +399,49 @@ LEFT JOIN [ACC-LOCAL]...Nadania a ON p.IdKlientaNadawcy = a.IdKlienta
 LEFT JOIN [XLS-RAPORTY]...[Sheet1$] e ON e.Miesiac = CONVERT(VARCHAR(7), GETDATE(), 120);
 GO
 
+-- =========================================================================
+-- 4. usp_GenerujRaportKonsolidacyjny
+-- Procedura agregująca dane z wielu węzłów jednocześnie (wielodostęp heterogeniczny).
+-- Łączy dane lokalne z tabelami z Oracle, Access oraz Excela.
+-- Wykorzystuje funkcje agregujące oraz jawne rzutowanie typów (CAST) w celu
+-- ujednolicenia typów danych pochodzących z różnych sterowników.
+-- =========================================================================
+CREATE PROCEDURE usp_GenerujRaportKonsolidacyjny
+    @DataOd DATETIME,
+    @DataDo DATETIME
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    SELECT 
+        k.IdKlienta,
+        k.NazwaFirmy_ImieNazwisko,
+        
+        -- Agregacja lokalna (liczba przesyłek)
+        COUNT(DISTINCT p.IdPrzesylki) AS LiczbaPrzesylekLokalnych,
+        
+        -- Agregacja i rzutowanie danych zdalnych z Oracle (kwoty faktur)
+        CAST(ISNULL(SUM(f.kwota_brutto), 0) AS DECIMAL(10,2)) AS SumaFakturOracle,
+        
+        -- Agregacja danych zdalnych z bazy MS Access
+        COUNT(DISTINCT a.IdNadania) AS LiczbaNadanAccess,
+        
+        -- Agregacja i rzutowanie danych zdalnych z arkusza Excel
+        CAST(ISNULL(SUM(CAST(e.SumaDostaw AS DECIMAL(10,2))), 0) AS DECIMAL(10,2)) AS SumaDostawExcel
+    FROM Klienci k
+    LEFT JOIN Przesylki p ON k.IdKlienta = p.IdKlientaNadawcy
+    -- Dane zdalne Oracle przez Linked Server
+    LEFT JOIN [ORA-ACCT]..COURIER_RO.FAKTURY f 
+        ON p.IdPrzesylki = f.id_przesylki 
+        AND f.data_wystawienia BETWEEN @DataOd AND @DataDo
+    -- Dane zdalne Access przez Linked Server
+    LEFT JOIN [ACC-LOCAL]...Nadania a 
+        ON k.IdKlienta = a.IdKlienta 
+        AND a.DataNadania BETWEEN @DataOd AND @DataDo
+    -- Dane zdalne Excel przez Linked Server
+    LEFT JOIN [XLS-RAPORTY]...[Sheet1$] e 
+        ON e.Miesiac = CONVERT(VARCHAR(7), @DataOd, 120)
+    GROUP BY k.IdKlienta, k.NazwaFirmy_ImieNazwisko;
+END;
+GO
+
