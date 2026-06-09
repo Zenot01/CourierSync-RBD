@@ -1,6 +1,11 @@
 -- Kraków
+-- Loginy muszą być tworzone w kontekście bazy master
+USE [master];
+GO
+
 CREATE LOGIN RegionalAdminLogin WITH PASSWORD = 'REGAdminPassword123!';
-CREATE LOGIN LinkedServerLogin WITH PASSWORD = 'REGLinkedPassword123!'; 
+CREATE LOGIN LinkedServerLogin WITH PASSWORD = 'REGLinkedPassword123!';
+GO
 
 USE KrakowHQ;
 
@@ -220,10 +225,10 @@ BEGIN
         KolejnoscZaladunku = rp.KolejnoscZaladunku,
         SektorTira = CASE
             -- Pierwsza 1/3 trasy (dostarczana jako ostatnia) → ładowana na końcu → PRZÓD
-            WHEN KolejnoscRozladunku <= @LiczbaEtapow / 3
+            WHEN p.KolejnoscRozladunku <= @LiczbaEtapow / 3
                 THEN 'PRZOD'
             -- Ostatnia 1/3 trasy (dostarczana jako pierwsza) → ładowana jako pierwsza → TYŁ
-            WHEN KolejnoscRozladunku > (@LiczbaEtapow * 2) / 3
+            WHEN p.KolejnoscRozladunku > (@LiczbaEtapow * 2) / 3
                 THEN 'TYL'
             -- Środkowe etapy → ŚRODEK
             ELSE 'SRODEK'

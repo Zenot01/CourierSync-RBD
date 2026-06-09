@@ -7,11 +7,12 @@ CREATE ROLE role_rep;
 CREATE ROLE role_audit;
 
 -- 2. Tworzenie Użytkowników
-CREATE USER COURIER_ADMIN IDENTIFIED BY AdminSecure123!;
-CREATE USER COURIER_APP IDENTIFIED BY AppSecure123!;
-CREATE USER COURIER_RO IDENTIFIED BY ROSecure123!;
-CREATE USER COURIER_REP IDENTIFIED BY RepSecure123!;
-CREATE USER COURIER_AUDIT IDENTIFIED BY AuditSecure123!;
+-- Hasła w cudzysłowach wymagane gdy zawierają znaki specjalne (np. !) - Oracle SQL*Plus
+CREATE USER COURIER_ADMIN IDENTIFIED BY "AdminSecure123!";
+CREATE USER COURIER_APP IDENTIFIED BY "AppSecure123!";
+CREATE USER COURIER_RO IDENTIFIED BY "ROSecure123!";
+CREATE USER COURIER_REP IDENTIFIED BY "RepSecure123!";
+CREATE USER COURIER_AUDIT IDENTIFIED BY "AuditSecure123!";
 
 -- Podstawowe uprawnienia do logowania
 GRANT CREATE SESSION TO COURIER_ADMIN, COURIER_APP, COURIER_RO, COURIER_REP, COURIER_AUDIT;
@@ -59,7 +60,7 @@ CREATE TABLE RozliczeniaKurierskie (
     id_kuriera NUMBER NOT NULL, -- Powiązanie z SQLSRV-HQ
     okres_rozliczeniowy VARCHAR2(7) NOT NULL,
     kwota_prowizji NUMBER(10, 2) NOT NULL,
-    status_rozliczenia VARCHAR2(20) DEFAULT 'DO_REPOTU'
+    status_rozliczenia VARCHAR2(20) DEFAULT 'DO_RAPORTU'
 );
 
 -- 4. Nadanie uprawnień do tabel
@@ -133,8 +134,9 @@ BEGIN
     INSERT INTO Faktury (numer_faktury, id_klienta, kwota_netto, kwota_vat, kwota_brutto, data_wystawienia)
     VALUES (
         :NEW.numer_faktury, 
-        -- Wyszukanie IdKlienta na zdalnym serwerze na podstawie przekazanej nazwy
-        (SELECT IdKlienta FROM Klienci@hq_link_public WHERE NazwaFirmy_ImieNazwisko = :NEW.nazwa_klienta),
+        -- Wyszukanie IdKlienta na zdalnym serwerze; ROWNUM=1 chroni przed ORA-01422
+        -- gdy nazwa klienta nie jest unikalna
+        (SELECT IdKlienta FROM Klienci@hq_link_public WHERE NazwaFirmy_ImieNazwisko = :NEW.nazwa_klienta AND ROWNUM = 1),
         ROUND(:NEW.kwota_brutto / 1.23, 2), -- Symulowany podział kwoty
         ROUND(:NEW.kwota_brutto - (:NEW.kwota_brutto / 1.23), 2),
         :NEW.kwota_brutto,

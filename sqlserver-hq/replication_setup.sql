@@ -14,8 +14,8 @@ EXEC sp_adddistributiondb
     @database = N'distribution', 
     @data_folder = N'C:\Program Files\Microsoft SQL Server\MSSQL.Data', 
     @log_folder = N'C:\Program Files\Microsoft SQL Server\MSSQL.Log', 
-    @min_distretent = 0, 
-    @max_distretent = 72, 
+    @min_distretention = 0, 
+    @max_distretention = 72, 
     @history_retent = 48;
 GO
 

@@ -8,6 +8,7 @@ GO
 -- Warszawa
 CREATE LOGIN CentralAdminLogin WITH PASSWORD = 'HQAdminPassword123!';
 CREATE LOGIN AppCentralLogin WITH PASSWORD = 'HQAppPassword123!';
+GO
 
 USE WarszawaHQ;
 
@@ -401,7 +402,7 @@ SELECT
     e.SumaDostaw AS Excel_SumaDostaw,
     e.Miesiac AS Excel_Miesiac
 FROM Przesylki p
-LEFT JOIN [ORA-ACCT]..COURIER_RO.FAKTURY f ON p.IdPrzesylki = f.id_przesylki
+LEFT JOIN [ORA-ACCT]..[COURIER_RO].[FAKTURY] f ON p.IdPrzesylki = f.id_przesylki
 LEFT JOIN [ACC-LOCAL]...Nadania a ON p.IdKlientaNadawcy = a.IdKlienta
 LEFT JOIN [XLS-RAPORTY]...[Sheet1$] e ON e.Miesiac = CONVERT(VARCHAR(7), GETDATE(), 120);
 GO
@@ -438,7 +439,7 @@ BEGIN
     FROM Klienci k
     LEFT JOIN Przesylki p ON k.IdKlienta = p.IdKlientaNadawcy
     -- Dane zdalne Oracle przez Linked Server
-    LEFT JOIN [ORA-ACCT]..COURIER_RO.FAKTURY f 
+    LEFT JOIN [ORA-ACCT]..[COURIER_RO].[FAKTURY] f 
         ON p.IdPrzesylki = f.id_przesylki 
         AND f.data_wystawienia BETWEEN @DataOd AND @DataDo
     -- Dane zdalne Access przez Linked Server
