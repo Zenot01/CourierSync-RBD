@@ -9,7 +9,7 @@ BEGIN
         :NEW.numer_faktury, 
         -- Wyszukanie IdKlienta na zdalnym serwerze; ROWNUM=1 chroni przed ORA-01422
         -- gdy nazwa klienta nie jest unikalna
-        (SELECT IdKlienta FROM "dbo"."Klienci"@hq_link_public WHERE NazwaFirmy_ImieNazwisko = :NEW.nazwa_klienta AND ROWNUM = 1),
+        (SELECT "IdKlienta" FROM "dbo"."Klienci"@hq_link_public WHERE "NazwaFirmy_ImieNazwisko" = :NEW.nazwa_klienta AND ROWNUM = 1),
         ROUND(:NEW.kwota_brutto / 1.23, 2), -- Symulowany podział kwoty
         ROUND(:NEW.kwota_brutto - (:NEW.kwota_brutto / 1.23), 2),
         :NEW.kwota_brutto,
@@ -55,8 +55,9 @@ BEGIN
     -- Aktualizacja statusu przesyłki na serwerze zdalnym, jeśli uległ zmianie
     IF :NEW.status_przesylki IS NOT NULL AND (:OLD.status_przesylki IS NULL OR :OLD.status_przesylki <> :NEW.status_przesylki) THEN
         UPDATE "dbo"."Przesylki"@hq_link_public
-        SET StatusPrzesylki = :NEW.status_przesylki
-        WHERE IdPrzesylki = :NEW.id_przesylki;
+        SET "StatusPrzesylki" = :NEW.status_przesylki
+        WHERE "IdPrzesylki" = :NEW.id_przesylki;
     END IF;
 END;
 /
+

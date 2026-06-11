@@ -22,7 +22,26 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON Faktury TO role_rep;
 GRANT SELECT, INSERT, UPDATE, DELETE ON Platnosci TO role_rep;
 GRANT SELECT, INSERT, UPDATE, DELETE ON RozliczeniaKurierskie TO role_rep;
 
+-- =========================================================================
+-- BEZPOŚREDNIE UPRAWNIENIA DLA UŻYTKOWNIKÓW (WYMAGANE DLA LINKED SERVER / DB LINK)
+-- W Oracle uprawnienia nadane przez role nie działają w połączeniach przez linki.
+-- =========================================================================
+GRANT SELECT, INSERT, UPDATE ON Faktury TO COURIER_APP;
+GRANT SELECT, INSERT, UPDATE ON Platnosci TO COURIER_APP;
+GRANT SELECT ON Cennik TO COURIER_APP;
+
+GRANT SELECT ON Cennik TO COURIER_RO;
+GRANT SELECT ON Faktury TO COURIER_RO;
+GRANT SELECT ON Platnosci TO COURIER_RO;
+GRANT SELECT ON RozliczeniaKurierskie TO COURIER_RO;
+
+GRANT SELECT, INSERT, UPDATE, DELETE ON Cennik TO COURIER_REP;
+GRANT SELECT, INSERT, UPDATE, DELETE ON Faktury TO COURIER_REP;
+GRANT SELECT, INSERT, UPDATE, DELETE ON Platnosci TO COURIER_REP;
+GRANT SELECT, INSERT, UPDATE, DELETE ON RozliczeniaKurierskie TO COURIER_REP;
+
 -- Dla audytu (dostęp wyłącznie do widoków raportowych)
+
 
 -- 5. Database Linki (Symulacja danych rozproszonych w Oracle)
 -- Usunięcie istniejących Database Linków w celu uniknięcia konfliktów
@@ -53,3 +72,12 @@ CREATE DATABASE LINK hq_link_private
 CREATE PUBLIC DATABASE LINK hq_link_public
    CONNECT TO AppCentralLogin IDENTIFIED BY "HQAppPassword123!"
    USING 'SQLSRV-HQ';
+/
+
+-- =========================================================================
+-- WERYFIKACJA POŁĄCZENIA DATABASE LINKÓW (Oracle -> SQL Server)
+-- =========================================================================
+-- Uruchom te zapytania po zaimplementowaniu linków, aby przetestować połączenie:
+-- SELECT * FROM dual@hq_link_public;
+-- SELECT * FROM dual@hq_link_private;
+

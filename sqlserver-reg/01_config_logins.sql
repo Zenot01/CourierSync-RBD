@@ -53,9 +53,9 @@ GO
 
 EXEC sys.sp_addlinkedserver   
    @server = N'SQLSRV-HQ',   
-   @srvproduct = N'SQL Server',
+   @srvproduct = N'',
    @provider = N'MSOLEDBSQL',   
-   @datasrc = N'WARSZAWA_HQ';
+   @datasrc = N'localhost\WARSZAWA_HQ';
 GO
 
 -- Logowanie do HQ używając konta integracyjnego
@@ -72,12 +72,3 @@ EXEC sys.sp_serveroption @server=N'SQLSRV-HQ', @optname=N'rpc', @optvalue=N'true
 EXEC sys.sp_serveroption @server=N'SQLSRV-HQ', @optname=N'rpc out', @optvalue=N'true';
 GO
 
--- test polaczenia z obsluga bledow
-BEGIN TRY
-    EXEC sys.sp_testlinkedserver N'SQLSRV-HQ';
-    PRINT 'Połączenie z SQLSRV-HQ działa poprawnie.';
-END TRY
-BEGIN CATCH
-    PRINT 'OSTRZEŻENIE: Nie można połączyć się z SQLSRV-HQ. Serwer/Baza centralna może nie być jeszcze uruchomiona.';
-END CATCH
-GO

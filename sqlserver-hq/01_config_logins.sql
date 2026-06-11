@@ -6,6 +6,10 @@ EXEC sys.sp_configure 'show advanced options', 1;
 RECONFIGURE;
 EXEC sys.sp_configure 'Ad Hoc Distributed Queries', 1;
 RECONFIGURE;
+
+-- Włączenie wymaganych opcji dla dostawcy Oracle OLE DB (OraOLEDB.Oracle)
+EXEC master.dbo.sp_MSsetdriverproperties @provider_name = N'OraOLEDB.Oracle', @property_name = N'AllowInProcess', @property_value = 1;
+EXEC master.dbo.sp_MSsetdriverproperties @provider_name = N'OraOLEDB.Oracle', @property_name = N'DynamicParameters', @property_value = 1;
 GO
 
 -- Usunięcie bazy jeśli istnieje i utworzenie jej na nowo dla czystego startu
@@ -58,9 +62,9 @@ GO
 
 EXEC sys.sp_addlinkedserver   
    @server = N'SQLSRV-REG',   
-   @srvproduct = N'SQL Server',
+   @srvproduct = N'',
    @provider = N'MSOLEDBSQL',   
-   @datasrc = N'KRAKOW_HQ';
+   @datasrc = N'localhost\KRAKOW_HQ';
 GO
 
 EXEC sys.sp_addlinkedsrvlogin   
@@ -96,7 +100,7 @@ EXEC sys.sp_addlinkedserver
    @server = N'ORA-ACCT',   
    @srvproduct = N'Oracle',   
    @provider = N'OraOLEDB.Oracle',   
-   @datasrc = N'XE'; 
+   @datasrc = N'(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST=localhost)(PORT=1522))(CONNECT_DATA=(SERVER=DEDICATED)(SID=rbd2026)))';
 GO
 
 -- Mapowanie loginów lokalnych na zdalne w Oracle (polityka ról)
@@ -104,7 +108,7 @@ GO
 EXEC sys.sp_addlinkedsrvlogin   
    @rmtsrvname = N'ORA-ACCT',   
    @useself = N'False',
-   @locallogin = N'COURIER_HQ_ADMIN',
+   @locallogin = N'CentralAdminLogin',
    @rmtuser = N'COURIER_ADMIN',          
    @rmtpassword = N'AdminSecure123!';  
 GO
@@ -113,7 +117,7 @@ GO
 EXEC sys.sp_addlinkedsrvlogin   
    @rmtsrvname = N'ORA-ACCT',   
    @useself = N'False',
-   @locallogin = N'COURIER_HQ_APP',
+   @locallogin = N'AppCentralLogin',
    @rmtuser = N'COURIER_APP',          
    @rmtpassword = N'AppSecure123!';  
 GO
@@ -154,7 +158,7 @@ EXEC sys.sp_addlinkedserver
    @server = N'ACC-LOCAL',   
    @srvproduct = N'Access',   
    @provider = N'Microsoft.ACE.OLEDB.12.0',   
-   @datasrc = N'C:\CourierSync\Database\LocalNadania.accdb';
+   @datasrc = N'C:\Users\WBK\Documents\Projekt\smss_oracl\CourierSync-RBD\access\LocalNadania.accdb';
 GO
 
 -- 4. XLS-RAPORTY
@@ -169,6 +173,8 @@ EXEC sys.sp_addlinkedserver
    @server = N'XLS-RAPORTY',   
    @srvproduct = N'Excel',   
    @provider = N'Microsoft.ACE.OLEDB.12.0',   
-   @datasrc = N'C:\CourierSync\Reports\MonthlyReport.xlsx',
+   @datasrc = N'C:\Users\WBK\Documents\Projekt\smss_oracl\CourierSync-RBD\excel\MonthlyReport.xlsx',
    @provstr = N'Excel 12.0 XML;HDR=YES';
 GO
+
+
