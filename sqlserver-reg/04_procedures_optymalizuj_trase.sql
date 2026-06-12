@@ -2,18 +2,7 @@ USE KrakowHQ;
 GO
 
 -- =========================================================================
--- 2. usp_OptymalizujTrase
--- Wyznacza optymalną trasę kuriera i generuje manifest załadunkowy (LIFO).
---
--- Działanie:
---   1. Pobiera aktywny przydział kuriera na dziś (trasa + pojazd).
---   2. Pobiera nieodebrane przesyłki kuriera z centralnej bazy HQ przez
---      Linked Server [SQLSRV-HQ], łącząc je z etapami trasy wg strefy doręczenia (IdSortowni).
---   3. Usuwa poprzedni manifest załadunkowy dla danego przydział, jeśli istnieje.
---   4. Generuje nowy manifest w tabeli ZaladunekPojazdu zgodnie z regułą LIFO:
---      - Paczki z OSTATNIEGO przystanku trasy → załadowane JAKO PIERWSZE → sektor TYŁ
---      - Paczki z PIERWSZEGO przystanku trasy → załadowane JAKO OSTATNIE → sektor PRZÓD
---   5. Zwraca gotowy manifest jako wynik SELECT.
+-- usp_OptymalizujTrase: Wyznacza optymalną trasę i generuje manifest (LIFO).
 -- =========================================================================
 CREATE OR ALTER PROCEDURE usp_OptymalizujTrase
     @IdKuriera INT
@@ -21,7 +10,7 @@ AS
 BEGIN
     SET NOCOUNT ON;
 
-    -- === KROK 1: Pobierz aktywny przydział kuriera na dziś ===
+    -- Pobranie aktywnego przydziału kuriera na dziś
     DECLARE @IdPrzydzialu INT;
     DECLARE @IdTrasy INT;
     DECLARE @LiczbaEtapow INT;
@@ -40,7 +29,7 @@ BEGIN
         RETURN;
     END;
 
-    -- === KROK 2: Sprawdź liczbę etapów trasy ===
+    -- Sprawdzenie liczby etapów trasy
     SELECT @LiczbaEtapow = COUNT(*)
     FROM EtapyTrasy
     WHERE IdTrasy = @IdTrasy;
@@ -51,9 +40,7 @@ BEGIN
         RETURN;
     END;
 
-    -- === KROK 3: Pobierz nieodebrane przesyłki kuriera z HQ przez Linked Server ===
-    -- OPENQUERY nie obsługuje parametrów lokalnych, dlatego budujemy zapytanie dynamicznie.
-    -- Wynik trafia najpierw do tabeli tymczasowej, skąd jest JOIN-owany z etapami trasy.
+    -- Pobranie nieodebranych przesyłek z HQ przez dynamiczny OPENQUERY
     CREATE TABLE #TempHQ (
         IdPrzesylki         INT,
         IdSortowniDocelowej INT
@@ -71,11 +58,11 @@ BEGIN
 
     EXEC sp_executesql @SqlHQ;
 
-    -- Łączymy wynik z etapami trasy; paczki bez pasującej strefy trafiają na koniec
+    -- Powiązanie przesyłek z etapami trasy
     DECLARE @Przesylki TABLE (
         IdPrzesylki          INT,
-        KolejnoscRozladunku  INT,  -- Kolejność dostarczenia (1 = pierwsza w trasie)
-        KolejnoscZaladunku   INT,  -- Kolejność załadowania (odwrotna LIFO)
+        KolejnoscRozladunku  INT,  -- Kolejność dostawy (1 = pierwsza)
+        KolejnoscZaladunku   INT,  -- Kolejność załadunku (odwrotne LIFO)
         SektorTira           VARCHAR(20)
     );
 
@@ -96,14 +83,11 @@ BEGIN
         RETURN;
     END;
 
-    -- === KROK 4: Wylicz kolejność załadunku (LIFO) i sektor tira ===
-    -- KolejnoscZaladunku = (@LiczbaEtapow + 1) - KolejnoscRozladunku + offset dla paczek w tym etapie
-    -- Sektor tira: etapy w drugiej połowie trasy → TYŁ, środek → SRODEK, pierwsza połowa → PRZOD
+    -- Wyznaczenie kolejności załadunku (LIFO) i sektora pojazdu
     ;WITH RankedPaczki AS (
         SELECT
             IdPrzesylki,
             KolejnoscRozladunku,
-            -- Wyliczamy odwróconą kolejność (LIFO): ostatni do rozładunku = pierwszy do załadunku
             ROW_NUMBER() OVER (ORDER BY KolejnoscRozladunku DESC) AS KolejnoscZaladunku
         FROM @Przesylki
     )
@@ -111,19 +95,19 @@ BEGIN
     SET
         KolejnoscZaladunku = rp.KolejnoscZaladunku,
         SektorTira = CASE
-            -- Pierwsza 1/3 trasy (dostarczana jako ostatnia) → ładowana na końcu → PRZÓD
+            -- Pierwsza 1/3 trasy -> PRZOD (ładowane na końcu)
             WHEN p.KolejnoscRozladunku <= @LiczbaEtapow / 3
                 THEN 'PRZOD'
-            -- Ostatnia 1/3 trasy (dostarczana jako pierwsza) → ładowana jako pierwsza → TYŁ
+            -- Ostatnia 1/3 trasy -> TYL (ładowane jako pierwsze)
             WHEN p.KolejnoscRozladunku > (@LiczbaEtapow * 2) / 3
                 THEN 'TYL'
-            -- Środkowe etapy → ŚRODEK
+            -- Środkowe etapy -> SRODEK
             ELSE 'SRODEK'
         END
     FROM @Przesylki p
     JOIN RankedPaczki rp ON p.IdPrzesylki = rp.IdPrzesylki;
 
-    -- === KROK 5: Wyczyść poprzedni manifest i wstaw nowy ===
+    -- Czyszczenie starego i zapis nowego manifestu
     DELETE FROM ZaladunekPojazdu
     WHERE IdPrzydzialu = @IdPrzydzialu;
 
@@ -136,7 +120,7 @@ BEGIN
     FROM @Przesylki
     ORDER BY KolejnoscZaladunku;
 
-    -- === KROK 6: Zwróć gotowy manifest załadunkowy ===
+    -- Pobranie i zwrócenie wygenerowanego manifestu
     SELECT
         z.KolejnoscZaladunku                        AS [Lp. załadunku],
         z.IdPrzesylki                               AS [ID Przesyłki],
@@ -147,9 +131,7 @@ BEGIN
     FROM ZaladunekPojazdu z
     JOIN PrzydzialyKurierow pk ON z.IdPrzydzialu = pk.IdPrzydzialu
     JOIN Trasy t               ON t.IdTrasy      = pk.IdTrasy
-    -- Etap wyznaczony przez kolejność doręczenia wyliczoną wcześniej
     JOIN EtapyTrasy et         ON et.IdTrasy     = pk.IdTrasy
-    -- Łączymy z powrotem przez zmienną, żeby odczytać KolejnoscRozladunku
     JOIN @Przesylki p          ON p.IdPrzesylki  = z.IdPrzesylki
                                AND et.KolejnoscRozladunku = p.KolejnoscRozladunku
     WHERE z.IdPrzydzialu = @IdPrzydzialu

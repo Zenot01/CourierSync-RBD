@@ -1,30 +1,21 @@
--- =========================================================================
--- KONFIGURACJA REPLIKACJI - WARSZAWA CENTRALNY WĘZEŁ (SQLSRV-HQ)
--- =========================================================================
+-- Replikacja (Warszawa)
 
 USE [master];
 GO
 
--- Włączenie opcji Ad Hoc w celu możliwości użycia OPENROWSET w replikacji migawkowej
+-- Opcje Ad Hoc dla replikacji
 EXEC sys.sp_configure 'show advanced options', 1;
 RECONFIGURE;
 EXEC sys.sp_configure 'Ad Hoc Distributed Queries', 1;
 RECONFIGURE;
 GO
 
--- UWAGA: Standardowa replikacja transakcyjna (SQLSRV-HQ -> SQLSRV-REG) dla tabel Klienci, Zamowienia, Przesylki
--- powinna być konfigurowana graficznie (GUI) w SQL Server Management Studio (SSMS).
--- Kod konfiguracyjny (distributor, publication, subscription) został usunięty, ponieważ 
--- można go w prosty sposób wygenerować za pomocą kreatora SSMS.
--- Dokładną instrukcję krok po kroku znajdziesz w pliku docs/MS_DTC_Replikacja.md.
+-- Instrukcja replikacji transakcyjnej w docs/MS_DTC_Replikacja.md.
 
 
--- =========================================================================
--- CZĘŚĆ B: SYMULACJA REPLIKACJI MIGAWKOWEJ (ORACLE -> SQLSRV-HQ)
--- Kopiuje cennik z Oracle raz na dobę w celu lokalnej weryfikacji
--- =========================================================================
+-- Symulacja replikacji migawkowej (Oracle -> SQLSRV-HQ)
 
--- 1. Utworzenie lokalnej tabeli repliki cennika w centrali
+-- Tabela repliki cennika
 IF OBJECT_ID('dbo.Cennik_Replica', 'U') IS NULL
 BEGIN
     CREATE TABLE Cennik_Replica (
@@ -37,17 +28,17 @@ BEGIN
 END
 GO
 
--- 2. Stworzenie procedury synchronizacji (Snapshot) cennika z Oracle do SQL Server
+-- Procedura synchronizacji cennika
 CREATE OR ALTER PROCEDURE usp_SynchronizujCennikOracle
 AS
 BEGIN
     SET NOCOUNT ON;
     
     BEGIN TRY
-        -- Truncate lokalnej kopii
+        -- Truncate kopii
         TRUNCATE TABLE Cennik_Replica;
         
-        -- Wstawienie świeżych danych z Oracle za pomocą OPENROWSET
+        -- Import z Oracle (OPENROWSET)
         INSERT INTO Cennik_Replica (id_uslugi, nazwa_uslugi, cena_bazowa, cena_za_kg)
         SELECT 
             CAST(id_uslugi AS INT),
@@ -65,11 +56,11 @@ BEGIN
 END;
 GO
 
--- 3. Konfiguracja cyklicznego SQL Server Agent Joba (uruchamianego raz na dobę)
+-- Konfiguracja SQL Server Agent Job
 USE [msdb];
 GO
 
--- Usuwanie istniejącego Joba w celu idempotentności
+-- Usunięcie istniejącego Joba
 IF EXISTS (SELECT job_id FROM sysjobs WHERE name = N'Replikacja_Cennika_Oracle_Snapshot')
 BEGIN
     EXEC dbo.sp_delete_job @job_name = N'Replikacja_Cennika_Oracle_Snapshot';
@@ -83,7 +74,7 @@ EXEC dbo.sp_add_job
     @description = N'Pobiera cennik z bazy Oracle raz na dobę i nadpisuje lokalną tabelę Cennik_Replica';
 GO
 
--- Dodanie kroku do Joba
+-- Dodanie kroku
 EXEC dbo.sp_add_jobstep 
     @job_name = N'Replikacja_Cennika_Oracle_Snapshot', 
     @step_name = N'Uruchomienie procedury synchronizacji', 
@@ -94,7 +85,7 @@ EXEC dbo.sp_add_jobstep
     @retry_interval = 10;
 GO
 
--- Dodanie harmonogramu (codziennie o godzinie 01:00)
+-- Harmonogram codzienny (01:00)
 EXEC dbo.sp_add_schedule 
     @schedule_name = N'Harmonogram_Codzienny_0100', 
     @freq_type = 4, -- Codziennie
@@ -102,13 +93,13 @@ EXEC dbo.sp_add_schedule
     @active_start_time = 010000; -- 01:00:00
 GO
 
--- Przypisanie harmonogramu do Joba
+-- Przypisanie harmonogramu
 EXEC dbo.sp_attach_schedule 
     @job_name = N'Replikacja_Cennika_Oracle_Snapshot', 
     @schedule_name = N'Harmonogram_Codzienny_0100';
 GO
 
--- Przypisanie serwera docelowego (lokalny)
+-- Przypisanie serwera docelowego
 EXEC dbo.sp_add_jobserver 
     @job_name = N'Replikacja_Cennika_Oracle_Snapshot', 
     @server_name = @@SERVERNAME;

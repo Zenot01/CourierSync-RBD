@@ -1,25 +1,18 @@
 USE WarszawaHQ;
 GO
 
--- =========================================================================
--- PROCEDURY SKŁADOWANE (WARSZAWA CENTRALNY WĘZEŁ) - ETAP 2 (TRANSAKCJE)
--- =========================================================================
+-- Procedury transakcyjne (Warszawa)
 
--- =========================================================================
--- 1. usp_PotwierdzDoreczenie
--- Główna procedura transakcji rozproszonej koordynowana przez MS DTC.
--- Aktualizuje status w centrali, rejestruje zdarzenie w oddziale
--- oraz wystawia fakturę w Oracle.
--- =========================================================================
+-- usp_PotwierdzDoreczenie: Potwierdzenie doręczenia (transakcja rozproszona MS DTC)
 CREATE OR ALTER PROCEDURE usp_PotwierdzDoreczenie
     @IdPrzesylki INT,
     @IdKuriera INT
 AS
 BEGIN
     SET NOCOUNT ON;
-    SET XACT_ABORT ON; -- Krytyczne dla prawidłowego działania transakcji rozproszonych
+    SET XACT_ABORT ON; -- Wymagane dla transakcji rozproszonych
 
-    -- Pobranie informacji o przesyłce i opłacie
+    -- Pobranie danych przesyłki
     DECLARE @IdKlienta INT;
     DECLARE @KwotaBrutto DECIMAL(10,2);
     
@@ -37,19 +30,19 @@ BEGIN
 
     IF @KwotaBrutto IS NULL OR @KwotaBrutto <= 0
     BEGIN
-        -- Wywołanie wyceny jako fallback, jeśli przesyłka nie została wyceniona
+        -- Wycena fallback
         EXEC usp_WycenPrzesylke @IdPrzesylki = @IdPrzesylki;
         SELECT @KwotaBrutto = WyliczonaOplata FROM Przesylki WHERE IdPrzesylki = @IdPrzesylki;
     END
 
-    -- Obliczenie wartości netto i VAT
+    -- Obliczenie netto/VAT
     DECLARE @KwotaNetto DECIMAL(10,2) = ROUND(@KwotaBrutto / 1.23, 2);
     DECLARE @KwotaVat DECIMAL(10,2) = @KwotaBrutto - @KwotaNetto;
     
-    -- Wygenerowanie unikalnego numeru faktury
+    -- Generowanie numeru faktury
     DECLARE @NumerFaktury VARCHAR(50) = 'FV/' + CAST(@IdPrzesylki AS VARCHAR) + '/' + CONVERT(VARCHAR(8), GETDATE(), 112);
 
-    -- Pobranie IdSortowni powiązanej z kurierem (lub pierwszej dostępnej)
+    -- Pobranie sortowni kuriera
     DECLARE @IdSortowni INT;
     SELECT TOP 1 @IdSortowni = s.IdSortowni
     FROM Sortownie s
@@ -61,32 +54,32 @@ BEGIN
         SELECT TOP 1 @IdSortowni = IdSortowni FROM Sortownie;
     END
 
-    -- Rozpoczęcie transakcji rozproszonej (MS DTC)
+    -- Start transakcji rozproszonej (MS DTC)
     BEGIN DISTRIBUTED TRANSACTION;
 
     BEGIN TRY
-        -- Krok A: Aktualizacja statusu przesyłki w centrali (lokalnie)
+        -- 1. Status przesyłki w centrali (lokalnie)
         UPDATE Przesylki
         SET StatusPrzesylki = 'Dostarczona'
         WHERE IdPrzesylki = @IdPrzesylki;
 
-        -- Krok B: Zapis zdarzenia logistycznego w oddziale regionalnym przez Linked Server
+        -- 2. Zdarzenie logistyczne w oddziale (Linked Server)
         EXEC [SQLSRV-REG].KrakowHQ.dbo.usp_ZapiszZdarzenieLogistyczne 
             @IdPrzesylki = @IdPrzesylki,
             @KodZdarzenia = 'DORECZONO',
             @IdKuriera = @IdKuriera,
             @Lokalizacja = @IdSortowni;
 
-        -- Krok C: Wystawienie faktury w Oracle przez RPC i Linked Server
+        -- 3. Wystawienie faktury w Oracle (RPC)
         DECLARE @Sql NVARCHAR(MAX) = N'BEGIN COURIER_ADMIN.usp_WystawFakture(?, ?, ?, ?, ?, ?); END;';
         EXEC (@Sql, @IdKlienta, @NumerFaktury, @KwotaNetto, @KwotaVat, @KwotaBrutto, @IdPrzesylki) AT [ORA-ACCT];
 
-        -- Zatwierdzenie transakcji rozproszonej na wszystkich węzłach
+        -- Zatwierdzenie transakcji
         COMMIT TRANSACTION;
         PRINT 'Dostarczenie przesyłki potwierdzone i zafakturowane pomyślnie.';
     END TRY
     BEGIN CATCH
-        -- Wycofanie transakcji w przypadku jakiegokolwiek błędu na dowolnym węźle
+        -- Wycofanie transakcji przy błędzie
         IF @@TRANCOUNT > 0
             ROLLBACK TRANSACTION;
 

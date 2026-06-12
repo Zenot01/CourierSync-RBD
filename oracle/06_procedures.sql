@@ -1,4 +1,4 @@
--- 8. Procedury składowane (wystawianie faktur i rozliczenia)
+-- Procedury składowane
 CREATE OR REPLACE PROCEDURE usp_WystawFakture (
     p_id_klienta IN NUMBER,
     p_numer_faktury IN VARCHAR2,
@@ -32,7 +32,7 @@ EXCEPTION
 END usp_RozliczKuriera;
 /
 
--- Procedura generowania raportów finansowych z obsługą błędów
+-- Generowanie raportu finansowego
 CREATE OR REPLACE PROCEDURE usp_GenerujRaportFinansowy (
     p_data_od IN DATE,
     p_data_do IN DATE,

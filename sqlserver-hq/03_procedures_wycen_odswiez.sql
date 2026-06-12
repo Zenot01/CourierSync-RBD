@@ -1,16 +1,9 @@
 USE WarszawaHQ;
 GO
 
--- =========================================================================
--- PROCEDURY SKŁADOWANE (WARSZAWA CENTRALNY WĘZEŁ) - ETAP 1
--- =========================================================================
+-- Procedury (Warszawa)
 
--- =========================================================================
--- 2. usp_WycenPrzesylke
--- Pobiera cennik z serwera Oracle przy użyciu OPENROWSET,
--- oblicza opłatę na podstawie typu przesyłki oraz wagi,
--- i zapisuje ją w tabeli lokalnej.
--- =========================================================================
+-- usp_WycenPrzesylke: Oblicza opłatę na podstawie typu przesyłki oraz wagi i zapisuje ją.
 CREATE OR ALTER PROCEDURE usp_WycenPrzesylke
     @IdPrzesylki INT
 AS
@@ -36,14 +29,14 @@ BEGIN
     DECLARE @CenaBazowa DECIMAL(10,2);
     DECLARE @CenaZaKg DECIMAL(10,2);
 
-    -- Pobranie cennika z lokalnej tabeli repliki (Cennik_Replica)
+    -- Pobranie cennika z repliki
     SELECT TOP 1 
         @CenaBazowa = cena_bazowa,
         @CenaZaKg = ISNULL(cena_za_kg, 0)
     FROM Cennik_Replica
     WHERE UPPER(nazwa_uslugi) = UPPER(@TypPrzesylki);
 
-    -- Obsługa przypadku braku dopasowania - pobranie ceny standardowej
+    -- Gdy brak dopasowania, pobierz cennik STANDARD
     IF @CenaBazowa IS NULL
     BEGIN
         SELECT TOP 1 
@@ -64,13 +57,7 @@ BEGIN
 END;
 GO
 
--- =========================================================================
--- 3. usp_OdswiezRaportXLS
--- Pobiera niezaimportowane zlecenia z lokalnej bazy MS Access (ACC-LOCAL)
--- filtrując je po dacie, łączy z lokalną tabelą Zamowienia
--- i wstawia nowe rekordy, oznaczając zaimportowane w Access jako Zaimportowane = 1.
--- Posiada obsługę błędów na wypadek braku dostępności Access.
--- =========================================================================
+-- usp_OdswiezRaportXLS: Importuje nowe zlecenia z MS Access (ACC-LOCAL).
 CREATE OR ALTER PROCEDURE usp_OdswiezRaportXLS
     @DataGraniczna DATETIME = NULL
 AS
@@ -81,10 +68,10 @@ BEGIN
         SET @DataGraniczna = '2000-01-01';
 
     BEGIN TRY
-        -- Sprawdzenie dostępności serwera połączonego
+        -- Test połączenia
         EXEC sys.sp_testlinkedserver N'ACC-LOCAL';
 
-        -- Wstawienie nowych zamówień
+        -- Import nowych zamówień
         INSERT INTO Zamowienia (IdKlienta, DataZlozenia, StatusZamowienia)
         SELECT 
             src.IdKlienta,
@@ -99,14 +86,14 @@ BEGIN
                 AND z.DataZlozenia = src.DataNadania
           );
 
-        -- Aktualizacja statusu zaimportowania w bazie Access za pomocą OPENQUERY
+        -- Oznaczenie w Access jako zaimportowane
         UPDATE OPENQUERY([ACC-LOCAL], 'SELECT Zaimportowane FROM Nadania WHERE Zaimportowane = 0')
         SET Zaimportowane = 1;
 
         PRINT 'Pomyślnie zaimportowano zamówienia z bazy Access.';
     END TRY
     BEGIN CATCH
-        -- Obsługa braku połączenia / błędów bazy Access bez przerywania działania innych procesów
+        -- Logowanie błędu importu
         DECLARE @Msg NVARCHAR(4000) = 'Błąd podczas importu z Access: ' + ERROR_MESSAGE();
         PRINT @Msg;
     END CATCH

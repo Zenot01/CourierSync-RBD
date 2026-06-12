@@ -49,17 +49,17 @@ CREATE TABLE Przesylki (
     IdKlientaNadawcy INT FOREIGN KEY REFERENCES Klienci(IdKlienta),
     IdKlientaOdbiorcy INT FOREIGN KEY REFERENCES Klienci(IdKlienta),
     TypPrzesylki VARCHAR(30) DEFAULT 'STANDARD',
-    Waga DECIMAL(10,2) NULL, -- Waga przesyłki używana do wyceny
+    Waga DECIMAL(10,2) NULL, -- Waga do wyceny
     IdPrzesylkiOryginalnej INT FOREIGN KEY REFERENCES Przesylki(IdPrzesylki),
-    WyliczonaOplata DECIMAL(10,2) NULL, -- Uzupełniane przez procedurę usp_WycenPrzesylke
+    WyliczonaOplata DECIMAL(10,2) NULL, -- Z usp_WycenPrzesylke
     StatusPrzesylki VARCHAR(30),
-    IdSortowniDocelowej INT FOREIGN KEY REFERENCES Sortownie(IdSortowni), -- Strefa/sortownia docelowa (wyznacza etap trasy kuriera)
-    IdKuriera INT NULL -- Kurier przypisany do doręczenia tej przesyłki
+    IdSortowniDocelowej INT FOREIGN KEY REFERENCES Sortownie(IdSortowni), -- Strefa docelowa
+    IdKuriera INT NULL -- Przypisany kurier
 );
 
 GO
 
--- Indeks wspierający filtrowanie paczek do doręczenia wg kuriera i strefy docelowej
+-- Indeks pod wyszukiwanie paczek kuriera
 CREATE INDEX IDX_Przesylki_StatusKurier
     ON Przesylki (StatusPrzesylki, IdKuriera, IdSortowniDocelowej);
 GO

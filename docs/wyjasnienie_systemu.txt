@@ -1,0 +1,231 @@
+================================================================================
+          ZROZUMIEĆ COURIERSYNC-RBD: PRZEWODNIK DLA STUDENTA
+================================================================================
+
+Witaj! Ten dokument wyjaśnia w prosty i logiczny sposób, jak działa system 
+logistyczny CourierSync-RBD. Wyobraź sobie, że zarządzasz firmą kurierską. 
+Masz centralę w Warszawie, oddział w Krakowie oraz dział finansowy (księgowość)
+obsługiwany przez zewnętrzny system Oracle. 
+
+Poniżej dowiesz się, jak te wszystkie elementy współpracują ze sobą jak 
+dobrze naoliwiona maszyna.
+
+--------------------------------------------------------------------------------
+SPIS TREŚCI:
+1. Architektura bazy danych (Kto z kim rozmawia i jak?)
+2. Droga paczki: Wysyłka i doręczenie (Krok po kroku)
+3. Droga paczki: Zwrot (Co gdy paczka nie dojdzie?)
+4. Optymalizacja trasy kuriera (Zasada LIFO i sektory w samochodzie)
+5. Słowniczek procedur (Co robi każda procedura po ludzku)
+--------------------------------------------------------------------------------
+
+
+================================================================================
+1. ARCHITEKTURA BAZY DANYCH (KTO Z KIM ROZMAWIA I JAK?)
+================================================================================
+
+Nasz system składa się z trzech niezależnych baz danych (serwerów) oraz dwóch
+zewnętrznych źródeł plików. Muszą one stale wymieniać informacje:
+
+A. WarszawaHQ (SQL Server - Centrala)
+   * To mózg całej operacji. Tu rejestrowane są wszystkie zamówienia i paczki.
+   
+B. KrakowHQ (SQL Server - Oddział Regionalny)
+   * To lokalny magazyn i baza dla kurierów działających w terenie (np. w Krakowie).
+   * Kurier musi wiedzieć, co ma spakować na samochód, jaką ma trasę i gdzie jechać.
+
+C. ORA-ACCT (Baza Oracle - Księgowość)
+   * System finansowy. Odpowiada za cenniki, wystawianie faktur klientom 
+     oraz rozliczanie prowizji kurierów.
+
+Jak te bazy ze sobą rozmawiają?
+------------------------------
+1. Replikacja Transakcyjna (Warszawa -> Kraków):
+   * Kiedy w Warszawie (centrali) pojawi się nowa paczka lub klient, system 
+     automatycznie kopiuje te dane do Krakowa w ułamku sekundy. Dzięki temu 
+     Kraków ma zawsze aktualne dane na bieżąco.
+     
+2. Replikacja Migawkowa (Oracle -> Warszawa):
+   * Cennik usług kurierskich znajduje się w bazie Oracle. Ponieważ cennik zmienia
+     się bardzo rzadko (np. raz na rok), nie ma sensu pytać bazy Oracle o ceny 
+     przy każdej wycenie paczki. Dlatego raz na dobę (w nocy o 01:00) specjalny 
+     program kopiuje cały cennik z Oracle do bazy w Warszawie (do tabeli Cennik_Replica).
+     
+3. Linked Servers i DB Linki (Wirtualne Mosty):
+   * SQL Server posiada tzw. "Linked Servers", które pozwalają mu widzieć drugiego
+     SQL Servera oraz bazę Oracle tak, jakby były na tym samym komputerze. 
+     Baza Oracle ma swój odpowiednik - "Database Linki" (DB Linki).
+     
+4. Pliki zewnętrzne (Access i Excel):
+   * MS Access: Lokalne biuro przyjmuje zgłoszenia od klientów i zapisuje je w bazie 
+     Access (plik .accdb). Centrala co jakiś czas sprawdza ten plik i importuje zlecenia.
+   * MS Excel: Służy do generowania ładnych, zbiorczych raportów finansowych 
+     dla dyrekcji (plik .xlsx).
+
+
+================================================================================
+2. DROGA PACZKI: WYSYŁKA I DORĘCZENIE (KROK PO KROKU)
+================================================================================
+
+Jak wygląda standardowy proces wysłania i doręczenia przesyłki?
+
+Krok 1: Przyjęcie zlecenia (Access -> Centrala)
+   * Zgłoszenie trafia do lokalnej bazy MS Access. 
+   * Uruchamiana jest procedura `usp_OdswiezRaportXLS` w Warszawie. Pobiera ona 
+     nowe paczki z Accessa, zapisuje je w tabeli `Zamowienia` w Warszawie 
+     i oznacza w pliku Access, że zostały już zaimportowane.
+
+Krok 2: Wycena przesyłki (Centrala)
+   * Centrala uruchamia procedurę `usp_WycenPrzesylke`. 
+   * Procedura sprawdza wagę paczki i jej typ (np. STANDARD), patrzy do pobranego 
+     wcześniej z Oracle cennika (`Cennik_Replica`) i wylicza ostateczny koszt 
+     (Cena Bazowa + Waga * Cena za kg), zapisując go przy paczce.
+
+Krok 3: Replikacja i Przydział (Kraków)
+   * Informacja o paczce automatycznie replikuje się z Warszawy do Krakowa. 
+   * Kierownik w Krakowie przypisuje paczkę do konkretnego kuriera i pojazdu na dziś.
+
+Krok 4: Załadunek i Optymalizacja trasy (Kraków)
+   * Przed wyjazdem uruchamiana jest procedura `usp_OptymalizujTrase` (szczegóły 
+     w sekcji 4). Układa ona paczki na samochodzie tak, aby kurier miał do nich 
+     łatwy dostęp (zasada LIFO).
+
+Krok 5: Doręczenie paczki i Wielka Magia Transakcji Rozproszonej (MS DTC)
+   * Kurier puka do drzwi i wręcza paczkę odbiorcy. W systemie uruchamia się 
+     procedura `usp_PotwierdzDoreczenie`. 
+   * Ponieważ ta operacja zmienia dane na różnych serwerach, system uruchamia 
+     **Transakcję Rozproszoną** za pomocą narzędzia **MS DTC (Microsoft Distributed 
+     Transaction Coordinator)**. DTC działa jak sędzia, który dba o to, by 
+     wykonały się WSZYSTKIE kroki albo ŻADEN (zasada "wszystko albo nic"):
+     
+     * KROK A (w Warszawie): Status paczki zmienia się na "Dostarczona".
+     * KROK B (w Krakowie): Zapisuje się logistyczne zdarzenie "DORECZONO".
+     * KROK C (w Oracle): Automatycznie wystawia się faktura dla klienta 
+       (wywołanie procedury `usp_WystawFakture` w Oracle).
+       
+   * Jeśli wszystkie 3 kroki się powiodą, DTC zatwierdza transakcję (COMMIT). 
+     Jeśli np. zerwie się kabel sieciowy do Oracle i faktura nie będzie mogła 
+     się wystawić, DTC wycofuje wszystkie zmiany (ROLLBACK) – paczka w Warszawie 
+     nadal ma status "W drodze", a w Krakowie nie ma wpisu o doręczeniu. Dzięki 
+     temu nie ma bałaganu w papierach!
+
+
+================================================================================
+3. DROGA PACZKI: ZWROT (CO GDY PACZKA NIE DOJDZIE?)
+================================================================================
+
+Życie kuriera to nie tylko sukcesy. Czasami odbiorca odmawia przyjęcia paczki,
+jest nieobecny lub adres jest błędny. Jak wtedy działa system?
+
+Krok 1: Rejestracja zdarzenia w terenie (Kraków)
+   * Kurier za pomocą swojej aplikacji (która łączy się z bazą regionalną w Krakowie)
+     wywołuje procedurę `usp_ZapiszZdarzenieLogistyczne`.
+   * Jako parametr podaje kod zdarzenia, np. 'ODMOWA_ODBIORU', 'BLEDNY_ADRES' 
+     lub 'NIEODNALEZIONO'.
+   * Procedura ta najpierw sprawdza, czy takiego zdarzenia nie zarejestrowano 
+     już dzisiaj (żeby uniknąć duplikatów), a następnie zapisuje je w tabeli 
+     `ZdarzeniaLogistyczne` w Krakowie.
+
+Krok 2: Powrót paczki do magazynu (Kraków -> Warszawa)
+   * Zdarzenie zapisane w Krakowie uruchamia wyzwalacz (Trigger) lub procedurę, 
+     która przekazuje informację do centrali w Warszawie.
+   * W Warszawie status przesyłki w tabeli `Przesylki` zmienia się z 
+     'DO_DORECZENIA' na np. 'ZWROT_DO_NADAWCY' lub 'W_MAGAZYNIE'.
+
+Krok 3: Finanse i rozliczenie zwrotu (Oracle)
+   * Jeśli paczka wraca do nadawcy, system w Warszawie może wygenerować nową 
+     wycenę (koszt zwrotu) i połączyć ją z oryginalną przesyłką (`IdPrzesylkiOryginalnej`).
+   * Do bazy Oracle wysyłane jest żądanie wystawienia faktury korygującej 
+     lub nowej faktury za transport powrotny.
+
+
+================================================================================
+4. OPTYMALIZACJA TRASY KURIERA (ZASADA LIFO I SEKTORY W SAMOCHODZIE)
+================================================================================
+
+Wyobraź sobie, że ładujesz na pakę dostawczaka 50 paczek bez żadnego ładu. 
+Dojeżdżasz na pierwszy adres i okazuje się, że właściwa paczka leży na samym 
+końcu paki, zasypana innymi. Musisz wszystko wypakować na chodnik. Tracisz czas.
+
+Rozwiązaniem jest reguła **LIFO (Last In, First Out - Ostatni wszedł, pierwszy wyszedł)**.
+
+Jak działa nasza procedura `usp_OptymalizujTrase`?
+------------------------------------------------
+Procedura analizuje trasę kuriera, która składa się z etapów (przystanków) 
+ułożonych w kolejności rozładunku (1, 2, 3...):
+
+1. Kolejność załadunku (odwrotna do rozładunku):
+   * Paczki, które kurier dostarcza na OSTATNIM przystanku trasy, muszą być 
+     załadowane na samochód JAKO PIERWSZE. Wylądują głęboko przy szoferce.
+   * Paczki na PIERWSZY przystanek muszą być załadowane na końcu. Będą leżeć 
+     tuż przy tylnych drzwiach, łatwo dostępne.
+
+2. Podział na sektory pojazdu:
+   Procedura dzieli przestrzeń ładunkową pojazdu na 3 sektory:
+   * Sektor PRZOD (blisko szoferki) – tam trafiają paczki z pierwszej 1/3 trasy
+     (dostarczane na samym końcu dnia).
+   * Sektor SRODEK – paczki ze środkowego etapu dnia.
+   * Sektor TYL (przy drzwiach) – paczki z ostatniej 1/3 trasy (dostarczane 
+     jako pierwsze rano).
+
+Procedura zapisuje te wyliczenia w tabeli `ZaladunekPojazdu` w Krakowie, 
+dzięki czemu magazynierzy dokładnie wiedzą, w który sektor auta włożyć daną paczkę.
+
+
+================================================================================
+5. SŁOWNICZEK PROCEDUR (CO ROBI KAŻDA PROCEDURA PO LUDZKU)
+================================================================================
+
+=== BAZA WARSZAWA (CENTRALA) ===
+
+* `usp_WycenPrzesylke`
+  - Co robi: Oblicza, ile klient musi zapłacić za paczkę.
+  - Jak: Sprawdza typ i wagę paczki, porównuje to z cennikiem z Oracle 
+    (tabela `Cennik_Replica`) i aktualizuje kwotę w tabeli `Przesylki`.
+
+* `usp_OdswiezRaportXLS`
+  - Co robi: Pobiera nowe zamówienia z zewnętrznej bazy MS Access.
+  - Jak: Sprawdza tabelę `Nadania` w Accessie, przenosi nowe wiersze do SQL Servera, 
+    a w Accessie ustawia flagę `Zaimportowane = 1`, żeby nie importować ich ponownie.
+
+* `usp_PotwierdzDoreczenie`
+  - Co robi: Kończy proces dostawy paczki.
+  - Jak: W ramach jednej bezpiecznej transakcji rozproszonej (MS DTC) zmienia status 
+    paczki na "Dostarczona", zleca zapisania logu w Krakowie oraz uruchamia 
+    generowanie faktury w Oracle.
+
+
+=== BAZA KRAKÓW (ODDZIAŁ REGIONALNY) ===
+
+* `usp_OptymalizujTrase`
+  - Co robi: Tworzy plan załadunku samochodu kuriera.
+  - Jak: Pobiera przydziały kuriera, sortuje paczki w odwróconej kolejności 
+    dostaw (LIFO) i przypisuje je do sektorów (PRZOD, SRODEK, TYL).
+
+* `usp_ZapiszZdarzenieLogistyczne`
+  - Co robi: Zapisuje w historii paczki, co się z nią dzieje (np. 'W_TRASIE', 
+    'DORECZONO', 'ZWROT').
+  - Jak: Sprawdza, czy to samo zdarzenie dla tej paczki nie zostało już dodane 
+    dzisiaj (ochrona przed błędami i duplikatami), a jeśli nie – zapisuje je w bazie.
+
+
+=== BAZA ORACLE (FINANSE) ===
+
+* `usp_WystawFakture`
+  - Co robi: Tworzy fakturę VAT w module księgowym.
+  - Jak: Zapisuje numer faktury, dane klienta, kwoty netto/vat/brutto w tabeli `Faktury`.
+  - Ważne: Ta procedura NIE MA w sobie polecenia COMMIT ani ROLLBACK, ponieważ jej 
+    zatwierdzaniem zarządza koordynator MS DTC z poziomu SQL Servera!
+
+* `usp_RozliczKuriera`
+  - Co robi: Nalicza prowizję dla kuriera za wykonaną pracę.
+  - Jak: Wstawia dane rozliczeniowe i status 'ZATWIERDZONE' do tabeli 
+    `RozliczeniaKurierskie`.
+
+* `usp_GenerujRaportFinansowy`
+  - Co robi: Podsumowuje finanse firmy za dany okres.
+  - Jak: Sumuje wszystkie wystawione faktury i płatności z podanego przedziału dat.
+
+================================================================================
+Koniec dokumentu. Mamy nadzieję, że teraz wszystko jest jasne! Powodzenia w nauce!
+================================================================================

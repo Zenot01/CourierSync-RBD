@@ -1,5 +1,5 @@
--- Oracle Cennik
--- Usunięcie istniejących użytkowników i ról w celu uniknięcia konfliktów
+-- Oracle
+-- Czyszczenie istniejących schematów i ról
 DECLARE
   PROCEDURE safe_drop_role(p_role IN VARCHAR2) IS
   BEGIN
@@ -17,7 +17,7 @@ DECLARE
       IF SQLCODE != -1918 THEN RAISE; END IF;
   END;
 BEGIN
-  -- Usuwanie użytkowników
+  -- Usuwanie userów
   safe_drop_user('COURIER_ADMIN');
   safe_drop_user('COURIER_APP');
   safe_drop_user('COURIER_RO');
@@ -33,25 +33,24 @@ BEGIN
 END;
 /
 
--- 1. Tworzenie Ról
+-- Tworzenie Ról
 CREATE ROLE role_admin;
 CREATE ROLE role_app;
 CREATE ROLE role_ro;
 CREATE ROLE role_rep;
 CREATE ROLE role_audit;
 
--- 2. Tworzenie Użytkowników
--- Hasła w cudzysłowach wymagane gdy zawierają znaki specjalne (np. !) - Oracle SQL*Plus
+-- Tworzenie Użytkowników
 CREATE USER COURIER_ADMIN IDENTIFIED BY "AdminSecure123!";
 CREATE USER COURIER_APP IDENTIFIED BY "AppSecure123!";
 CREATE USER COURIER_RO IDENTIFIED BY "ROSecure123!";
 CREATE USER COURIER_REP IDENTIFIED BY "RepSecure123!";
 CREATE USER COURIER_AUDIT IDENTIFIED BY "AuditSecure123!";
 
--- Podstawowe uprawnienia do logowania
+-- Uprawnienia do logowania
 GRANT CREATE SESSION TO COURIER_ADMIN, COURIER_APP, COURIER_RO, COURIER_REP, COURIER_AUDIT;
 
--- 3. Przypisanie użytkowników do ról
+-- Nadanie ról użytkownikom
 GRANT role_admin TO COURIER_ADMIN;
 GRANT role_app TO COURIER_APP;
 GRANT role_ro TO COURIER_RO;

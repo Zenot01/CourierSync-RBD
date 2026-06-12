@@ -1,15 +1,10 @@
 USE KrakowHQ;
 GO
 
--- =========================================================================
 -- PROCEDURY SKŁADOWANE (KRAKÓW ODDZIAŁ REGIONALNY)
--- =========================================================================
 
--- =========================================================================
 -- 1. usp_ZapiszZdarzenieLogistyczne
 -- Zapisuje zdarzenie logistyczne w lokalnej bazie.
--- Zabezpieczona przed duplikatem za pomocą warunku EXISTS.
--- =========================================================================
 CREATE OR ALTER PROCEDURE usp_ZapiszZdarzenieLogistyczne
     @IdPrzesylki INT,
     @KodZdarzenia VARCHAR(20),

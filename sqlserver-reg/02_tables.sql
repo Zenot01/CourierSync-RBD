@@ -16,44 +16,44 @@ CREATE TABLE Trasy (
     OpisStrefy VARCHAR(250)
 );
 
--- Tabela: EtapyTrasy (kolejność przystanków na trasie)
+-- Tabela: EtapyTrasy
 CREATE TABLE EtapyTrasy (
     IdEtapu INT IDENTITY(1,1) PRIMARY KEY,
     IdTrasy INT FOREIGN KEY REFERENCES Trasy(IdTrasy),
-    IdSortowni INT NOT NULL, -- Logiczne powiązanie z HQ_Sortownie
-    KolejnoscRozladunku INT NOT NULL, -- Kolejny numer przystanku na trasie (np. 1, 2, 3)
+    IdSortowni INT NOT NULL, -- Powiązanie z HQ
+    KolejnoscRozladunku INT NOT NULL, -- Numer przystanku
     CONSTRAINT UC_TrasaKolejnosc UNIQUE (IdTrasy, KolejnoscRozladunku)
 );
 
 -- Tabela: PrzydzialyKurierow
 CREATE TABLE PrzydzialyKurierow (
     IdPrzydzialu INT IDENTITY(1,1) PRIMARY KEY,
-    IdKuriera INT NOT NULL, -- IdPracownika pobierane logicznie z HQ przez replikację/widok
+    IdKuriera INT NOT NULL, -- Powiązanie z HQ
     IdPojazdu INT FOREIGN KEY REFERENCES Pojazdy(IdPojazdu),
     IdTrasy INT FOREIGN KEY REFERENCES Trasy(IdTrasy),
     DataPrzydzialu DATE DEFAULT CAST(GETDATE() AS DATE)
 );
 
--- Tabela: ZaladunekPojazdu (manifest załadunkowy LIFO)
+-- Tabela: ZaladunekPojazdu
 CREATE TABLE ZaladunekPojazdu (
     IdZaladunku INT IDENTITY(1,1) PRIMARY KEY,
     IdPrzydzialu INT FOREIGN KEY REFERENCES PrzydzialyKurierow(IdPrzydzialu),
-    IdPrzesylki INT NOT NULL, -- Logiczne powiązanie z tabelą Przesylki w HQ
-    KolejnoscZaladunku INT NOT NULL, -- Wyliczona kolejność ładowania paczki
-    SektorTira VARCHAR(20) NULL -- np. 'PRZOD', 'SRODEK', 'TYL'
+    IdPrzesylki INT NOT NULL, -- Powiązanie z HQ
+    KolejnoscZaladunku INT NOT NULL, -- Kolejność ładowania
+    SektorTira VARCHAR(20) NULL -- Sektor
 );
 
 -- Tabela: ZdarzeniaLogistyczne
 CREATE TABLE ZdarzeniaLogistyczne (
     IdZdarzenia INT IDENTITY(1,1) PRIMARY KEY,
-    IdPrzesylki INT NOT NULL, -- Logiczne powiązanie z tabelą Przesylki w HQ
-    KodZdarzenia VARCHAR(20) NOT NULL, -- np. 'DORECZONO', 'W_TRASIE'
+    IdPrzesylki INT NOT NULL, -- Powiązanie z HQ
+    KodZdarzenia VARCHAR(20) NOT NULL, -- Kod statusu
     IdKuriera INT NOT NULL,
-    IdSortowni INT NOT NULL, -- Logiczne powiązanie z tabelą Sortownie w HQ
+    IdSortowni INT NOT NULL, -- Powiązanie z HQ
     DataZdarzenia DATETIME DEFAULT GETDATE()
 );
 
--- Unikalny indeks zapobiegający duplikatom
+-- Indeks unikalny
 CREATE UNIQUE INDEX UIDX_Zdarzenia_ZapobieganieDuplikatom 
 ON ZdarzeniaLogistyczne (IdPrzesylki, KodZdarzenia, DataZdarzenia);
 

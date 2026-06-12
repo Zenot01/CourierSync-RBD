@@ -1,4 +1,4 @@
--- Włączenie opcji Ad Hoc w celu możliwości użycia OPENROWSET
+-- Włączenie opcji Ad Hoc (OPENROWSET)
 USE [master];
 GO
 
@@ -7,12 +7,12 @@ RECONFIGURE;
 EXEC sys.sp_configure 'Ad Hoc Distributed Queries', 1;
 RECONFIGURE;
 
--- Włączenie wymaganych opcji dla dostawcy Oracle OLE DB (OraOLEDB.Oracle)
+-- Konfiguracja dostawcy Oracle OLE DB
 EXEC master.dbo.sp_MSsetdriverproperties @provider_name = N'OraOLEDB.Oracle', @property_name = N'AllowInProcess', @property_value = 1;
 EXEC master.dbo.sp_MSsetdriverproperties @provider_name = N'OraOLEDB.Oracle', @property_name = N'DynamicParameters', @property_value = 1;
 GO
 
--- Usunięcie bazy jeśli istnieje i utworzenie jej na nowo dla czystego startu
+-- Reset bazy danych WarszawaHQ
 IF EXISTS (SELECT * FROM sys.databases WHERE name = 'WarszawaHQ')
 BEGIN
     ALTER DATABASE WarszawaHQ SET SINGLE_USER WITH ROLLBACK IMMEDIATE;
@@ -23,7 +23,7 @@ GO
 CREATE DATABASE WarszawaHQ;
 GO
 
--- Warszawa - Tworzenie loginów jeśli nie istnieją
+-- Tworzenie loginów serwera
 IF NOT EXISTS (SELECT * FROM sys.server_principals WHERE name = 'CentralAdminLogin')
 BEGIN
     CREATE LOGIN CentralAdminLogin WITH PASSWORD = 'HQAdminPassword123!', DEFAULT_DATABASE = WarszawaHQ;
@@ -39,12 +39,12 @@ GO
 USE WarszawaHQ;
 GO
 
--- Tworzenie użytkowników powiązanych z loginami
+-- Tworzenie użytkowników bazy
 CREATE USER COURIER_HQ_ADMIN FOR LOGIN CentralAdminLogin;
 CREATE USER COURIER_HQ_APP FOR LOGIN AppCentralLogin;
 GO
 
--- Nadanie uprawnień administracyjnych/aplikacyjnych w bazie
+-- Przypisanie do ról bazodanowych
 ALTER ROLE db_owner ADD MEMBER COURIER_HQ_ADMIN;
 ALTER ROLE db_datawriter ADD MEMBER COURIER_HQ_APP;
 ALTER ROLE db_datareader ADD MEMBER COURIER_HQ_APP;
@@ -53,7 +53,7 @@ GO
 USE [master];
 GO
 
--- 1. SQLSRV-REG
+-- Linked Server: SQLSRV-REG
 IF EXISTS (SELECT * FROM sys.servers WHERE name = 'SQLSRV-REG')
 BEGIN
     EXEC sys.sp_dropserver @server = 'SQLSRV-REG', @droplogins = 'droplogins';
@@ -74,12 +74,12 @@ EXEC sys.sp_addlinkedsrvlogin
    @rmtpassword = N'REGLinkedPassword123!';
 GO
 
--- Włączenie RPC i RPC Out dla SQLSRV-REG (wymagane do zdalnych procedur w transakcjach)
+-- RPC dla SQLSRV-REG
 EXEC sys.sp_serveroption @server=N'SQLSRV-REG', @optname=N'rpc', @optvalue=N'true';
 EXEC sys.sp_serveroption @server=N'SQLSRV-REG', @optname=N'rpc out', @optvalue=N'true';
 GO
 
--- test polaczenia z obsluga bledow
+-- Test połączenia
 BEGIN TRY
     EXEC sys.sp_testlinkedserver N'SQLSRV-REG';
     PRINT 'Połączenie z SQLSRV-REG działa poprawnie.';
@@ -89,7 +89,7 @@ BEGIN CATCH
 END CATCH
 GO
 
--- 2. ORA-ACCT
+-- Linked Server: ORA-ACCT (Oracle)
 IF EXISTS (SELECT * FROM sys.servers WHERE name = 'ORA-ACCT')
 BEGIN
     EXEC sys.sp_dropserver @server = 'ORA-ACCT', @droplogins = 'droplogins';
@@ -103,8 +103,8 @@ EXEC sys.sp_addlinkedserver
    @datasrc = N'(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST=localhost)(PORT=1522))(CONNECT_DATA=(SERVER=DEDICATED)(SID=rbd2026)))';
 GO
 
--- Mapowanie loginów lokalnych na zdalne w Oracle (polityka ról)
--- 1. Mapowanie administratora na konto z pełnymi prawami
+-- Mapowanie loginów na role w Oracle
+-- Admin -> COURIER_ADMIN
 EXEC sys.sp_addlinkedsrvlogin   
    @rmtsrvname = N'ORA-ACCT',   
    @useself = N'False',
@@ -113,7 +113,7 @@ EXEC sys.sp_addlinkedsrvlogin
    @rmtpassword = N'AdminSecure123!';  
 GO
 
--- 2. Mapowanie aplikacji na konto z prawami zapisu/odczytu faktur
+-- Aplikacja -> COURIER_APP
 EXEC sys.sp_addlinkedsrvlogin   
    @rmtsrvname = N'ORA-ACCT',   
    @useself = N'False',
@@ -122,7 +122,7 @@ EXEC sys.sp_addlinkedsrvlogin
    @rmtpassword = N'AppSecure123!';  
 GO
 
--- 3. Domyślne mapowanie dla pozostałych użytkowników (tylko do odczytu)
+-- Domyślne -> COURIER_RO
 EXEC sys.sp_addlinkedsrvlogin   
    @rmtsrvname = N'ORA-ACCT',   
    @useself = N'False',
@@ -131,12 +131,12 @@ EXEC sys.sp_addlinkedsrvlogin
    @rmtpassword = N'ROSecure123!';  
 GO
 
--- Włączenie RPC i RPC Out dla ORA-ACCT (wymagane do zdalnego wywoływania PL/SQL)
+-- RPC dla ORA-ACCT
 EXEC sys.sp_serveroption @server=N'ORA-ACCT', @optname=N'rpc', @optvalue=N'true';
 EXEC sys.sp_serveroption @server=N'ORA-ACCT', @optname=N'rpc out', @optvalue=N'true';
 GO
 
--- Weryfikacja dostępności połączenia z obsluga bledow
+-- Test połączenia
 BEGIN TRY
     EXEC sys.sp_testlinkedserver N'ORA-ACCT';
     PRINT 'Połączenie z ORA-ACCT działa poprawnie.';
@@ -146,14 +146,14 @@ BEGIN CATCH
 END CATCH
 GO
 
--- 3. ACC-LOCAL
+-- Linked Server: ACC-LOCAL (Access)
 IF EXISTS (SELECT * FROM sys.servers WHERE name = 'ACC-LOCAL')
 BEGIN
     EXEC sys.sp_dropserver @server = 'ACC-LOCAL', @droplogins = 'droplogins';
 END
 GO
 
--- Dodanie serwera połączonego MS Access (ACC-LOCAL)
+-- MS Access (ACC-LOCAL)
 EXEC sys.sp_addlinkedserver   
    @server = N'ACC-LOCAL',   
    @srvproduct = N'Access',   
@@ -161,14 +161,14 @@ EXEC sys.sp_addlinkedserver
    @datasrc = N'C:\Users\WBK\Documents\Projekt\smss_oracl\CourierSync-RBD\access\LocalNadania.accdb';
 GO
 
--- 4. XLS-RAPORTY
+-- Linked Server: XLS-RAPORTY (Excel)
 IF EXISTS (SELECT * FROM sys.servers WHERE name = 'XLS-RAPORTY')
 BEGIN
     EXEC sys.sp_dropserver @server = 'XLS-RAPORTY', @droplogins = 'droplogins';
 END
 GO
 
--- Dodanie serwera połączonego MS Excel (XLS-RAPORTY)
+-- MS Excel (XLS-RAPORTY)
 EXEC sys.sp_addlinkedserver   
    @server = N'XLS-RAPORTY',   
    @srvproduct = N'Excel',   
