@@ -3,15 +3,33 @@
 USE [master];
 GO
 
--- Reset bazy KrakowHQ
+-- Reset bazy KrakowHQ (tylko jeśli nie jest używana w replikacji jako subskrybent)
 IF EXISTS (SELECT * FROM sys.databases WHERE name = 'KrakowHQ')
 BEGIN
-    ALTER DATABASE KrakowHQ SET SINGLE_USER WITH ROLLBACK IMMEDIATE;
-    DROP DATABASE KrakowHQ;
+    BEGIN TRY
+        -- Sprawdzamy czy baza jest subskrybentem replikacji
+        IF OBJECT_ID('KrakowHQ.sys.subscriptions') IS NULL 
+           OR NOT EXISTS (SELECT 1 FROM KrakowHQ.sys.subscriptions)
+        BEGIN
+            ALTER DATABASE KrakowHQ SET SINGLE_USER WITH ROLLBACK IMMEDIATE;
+            DROP DATABASE KrakowHQ;
+            EXEC ('CREATE DATABASE KrakowHQ');
+            PRINT 'Baza KrakowHQ została zresetowana.';
+        END
+        ELSE
+        BEGIN
+            PRINT 'Baza KrakowHQ istnieje i jest używana w replikacji. Pominięto ponowne tworzenie bazy.';
+        END
+    END TRY
+    BEGIN CATCH
+        PRINT 'Nie można zresetować bazy KrakowHQ (prawdopodobnie jest używana w replikacji). Używam istniejącej bazy.';
+    END CATCH
 END
-GO
-
-CREATE DATABASE KrakowHQ;
+ELSE
+BEGIN
+    CREATE DATABASE KrakowHQ;
+    PRINT 'Baza KrakowHQ została utworzona.';
+END
 GO
 
 -- Tworzenie loginów
@@ -30,16 +48,38 @@ GO
 USE KrakowHQ;
 GO
 
--- Tworzenie użytkowników
-CREATE USER COURIER_REG_ADMIN FOR LOGIN RegionalAdminLogin;
-CREATE USER COURIER_LINKED_HQ FOR LOGIN LinkedServerLogin;
+-- Tworzenie użytkowników (tylko jeśli nie istnieją)
+IF NOT EXISTS (SELECT * FROM sys.database_principals WHERE name = 'COURIER_REG_ADMIN')
+BEGIN
+    CREATE USER COURIER_REG_ADMIN FOR LOGIN RegionalAdminLogin;
+END
+GO
+
+IF NOT EXISTS (SELECT * FROM sys.database_principals WHERE name = 'COURIER_LINKED_HQ')
+BEGIN
+    CREATE USER COURIER_LINKED_HQ FOR LOGIN LinkedServerLogin;
+END
 GO
 
 -- Uprawnienia
-ALTER ROLE db_owner ADD MEMBER COURIER_REG_ADMIN;
-ALTER ROLE db_datawriter ADD MEMBER COURIER_LINKED_HQ;
-ALTER ROLE db_datareader ADD MEMBER COURIER_LINKED_HQ;
+IF IS_ROLEMEMBER('db_owner', 'COURIER_REG_ADMIN') = 0
+BEGIN
+    ALTER ROLE db_owner ADD MEMBER COURIER_REG_ADMIN;
+END
 GO
+
+IF IS_ROLEMEMBER('db_datawriter', 'COURIER_LINKED_HQ') = 0
+BEGIN
+    ALTER ROLE db_datawriter ADD MEMBER COURIER_LINKED_HQ;
+END
+GO
+
+IF IS_ROLEMEMBER('db_datareader', 'COURIER_LINKED_HQ') = 0
+BEGIN
+    ALTER ROLE db_datareader ADD MEMBER COURIER_LINKED_HQ;
+END
+GO
+
 
 USE [master];
 GO
@@ -58,6 +98,7 @@ EXEC sys.sp_addlinkedserver
    @datasrc = N'localhost\WARSZAWA_HQ';
 GO
 
+
 -- Logowanie do HQ
 EXEC sys.sp_addlinkedsrvlogin   
    @rmtsrvname = N'SQLSRV-HQ',   
@@ -65,10 +106,5 @@ EXEC sys.sp_addlinkedsrvlogin
    @locallogin = NULL,
    @rmtuser = N'AppCentralLogin',
    @rmtpassword = N'HQAppPassword123!';
-GO
-
--- RPC dla SQLSRV-HQ
-EXEC sys.sp_serveroption @server=N'SQLSRV-HQ', @optname=N'rpc', @optvalue=N'true';
-EXEC sys.sp_serveroption @server=N'SQLSRV-HQ', @optname=N'rpc out', @optvalue=N'true';
 GO
 

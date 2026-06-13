@@ -7,20 +7,33 @@ RECONFIGURE;
 EXEC sys.sp_configure 'Ad Hoc Distributed Queries', 1;
 RECONFIGURE;
 
--- Konfiguracja dostawcy Oracle OLE DB
-EXEC master.dbo.sp_MSsetdriverproperties @provider_name = N'OraOLEDB.Oracle', @property_name = N'AllowInProcess', @property_value = 1;
-EXEC master.dbo.sp_MSsetdriverproperties @provider_name = N'OraOLEDB.Oracle', @property_name = N'DynamicParameters', @property_value = 1;
-GO
-
--- Reset bazy danych WarszawaHQ
+-- Reset bazy danych WarszawaHQ (tylko jeśli nie jest używana w replikacji)
 IF EXISTS (SELECT * FROM sys.databases WHERE name = 'WarszawaHQ')
 BEGIN
-    ALTER DATABASE WarszawaHQ SET SINGLE_USER WITH ROLLBACK IMMEDIATE;
-    DROP DATABASE WarszawaHQ;
+    BEGIN TRY
+        -- Jeśli baza istnieje, sprawdzamy czy ma aktywne publikacje replikacji
+        IF OBJECT_ID('WarszawaHQ.sys.publications') IS NULL 
+           OR NOT EXISTS (SELECT 1 FROM WarszawaHQ.sys.publications)
+        BEGIN
+            ALTER DATABASE WarszawaHQ SET SINGLE_USER WITH ROLLBACK IMMEDIATE;
+            DROP DATABASE WarszawaHQ;
+            EXEC ('CREATE DATABASE WarszawaHQ');
+            PRINT 'Baza WarszawaHQ została zresetowana.';
+        END
+        ELSE
+        BEGIN
+            PRINT 'Baza WarszawaHQ istnieje i zawiera publikacje replikacji. Pominięto ponowne tworzenie bazy.';
+        END
+    END TRY
+    BEGIN CATCH
+        PRINT 'Nie można zresetować bazy WarszawaHQ (prawdopodobnie jest używana w replikacji). Używam istniejącej bazy.';
+    END CATCH
 END
-GO
-
-CREATE DATABASE WarszawaHQ;
+ELSE
+BEGIN
+    CREATE DATABASE WarszawaHQ;
+    PRINT 'Baza WarszawaHQ została utworzona.';
+END
 GO
 
 -- Tworzenie loginów serwera
@@ -39,16 +52,38 @@ GO
 USE WarszawaHQ;
 GO
 
--- Tworzenie użytkowników bazy
-CREATE USER COURIER_HQ_ADMIN FOR LOGIN CentralAdminLogin;
-CREATE USER COURIER_HQ_APP FOR LOGIN AppCentralLogin;
+-- Tworzenie użytkowników bazy (tylko jeśli nie istnieją)
+IF NOT EXISTS (SELECT * FROM sys.database_principals WHERE name = 'COURIER_HQ_ADMIN')
+BEGIN
+    CREATE USER COURIER_HQ_ADMIN FOR LOGIN CentralAdminLogin;
+END
+GO
+
+IF NOT EXISTS (SELECT * FROM sys.database_principals WHERE name = 'COURIER_HQ_APP')
+BEGIN
+    CREATE USER COURIER_HQ_APP FOR LOGIN AppCentralLogin;
+END
 GO
 
 -- Przypisanie do ról bazodanowych
-ALTER ROLE db_owner ADD MEMBER COURIER_HQ_ADMIN;
-ALTER ROLE db_datawriter ADD MEMBER COURIER_HQ_APP;
-ALTER ROLE db_datareader ADD MEMBER COURIER_HQ_APP;
+IF IS_ROLEMEMBER('db_owner', 'COURIER_HQ_ADMIN') = 0
+BEGIN
+    ALTER ROLE db_owner ADD MEMBER COURIER_HQ_ADMIN;
+END
 GO
+
+IF IS_ROLEMEMBER('db_datawriter', 'COURIER_HQ_APP') = 0
+BEGIN
+    ALTER ROLE db_datawriter ADD MEMBER COURIER_HQ_APP;
+END
+GO
+
+IF IS_ROLEMEMBER('db_datareader', 'COURIER_HQ_APP') = 0
+BEGIN
+    ALTER ROLE db_datareader ADD MEMBER COURIER_HQ_APP;
+END
+GO
+
 
 USE [master];
 GO
@@ -66,6 +101,7 @@ EXEC sys.sp_addlinkedserver
    @provider = N'MSOLEDBSQL',   
    @datasrc = N'localhost\KRAKOW_HQ';
 GO
+
 
 EXEC sys.sp_addlinkedsrvlogin   
    @rmtsrvname = N'SQLSRV-REG',   
