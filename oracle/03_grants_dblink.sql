@@ -62,12 +62,12 @@ END;
 -- Prywatny DB Link
 CREATE DATABASE LINK hq_link_private
    CONNECT TO CentralAdminLogin IDENTIFIED BY "HQAdminPassword123!"
-   USING 'SQLSRV-HQ';
+   USING '(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST=localhost)(PORT=1522))(CONNECT_DATA=(SID=SQLSRV-HQ))(HS=OK))';
 
 -- Publiczny DB Link
 CREATE PUBLIC DATABASE LINK hq_link_public
    CONNECT TO AppCentralLogin IDENTIFIED BY "HQAppPassword123!"
-   USING 'SQLSRV-HQ';
+   USING '(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST=localhost)(PORT=1522))(CONNECT_DATA=(SID=SQLSRV-HQ))(HS=OK))';
 /
 
 -- Test połączenia DB Linków (Oracle -> SQL Server):
