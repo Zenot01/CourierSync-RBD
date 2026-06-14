@@ -95,7 +95,7 @@ EXEC sys.sp_addlinkedserver
    @server = N'SQLSRV-HQ',   
    @srvproduct = N'',
    @provider = N'MSOLEDBSQL',   
-   @datasrc = N'localhost\WARSZAWA_HQ';
+   @datasrc = N'localhost';
 GO
 
 

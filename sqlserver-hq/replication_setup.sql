@@ -45,8 +45,12 @@ BEGIN
             CAST(nazwa_uslugi AS VARCHAR(100)),
             CAST(cena_bazowa AS DECIMAL(10, 2)),
             CAST(cena_za_kg AS DECIMAL(10, 2))
-        FROM OPENROWSET('OraOLEDB.Oracle', 'XE';'COURIER_RO';'ROSecure123!', 'SELECT id_uslugi, nazwa_uslugi, cena_bazowa, cena_za_kg FROM COURIER_ADMIN.Cennik');
-        
+        FROM OPENROWSET(
+            'OraOLEDB.Oracle', 
+            '(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST=localhost)(PORT=1522))(CONNECT_DATA=(SERVER=DEDICATED)(SID=rbd2026)))';'COURIER_RO';'ROSecure123!', 
+            'SELECT id_uslugi, nazwa_uslugi, cena_bazowa, cena_za_kg FROM COURIER_ADMIN.Cennik'
+        );
+
         PRINT 'Pomyślnie zsynchronizowano cennik z Oracle (Replikacja migawkowa).';
     END TRY
     BEGIN CATCH

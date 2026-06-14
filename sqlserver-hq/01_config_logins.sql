@@ -7,6 +7,13 @@ RECONFIGURE;
 EXEC sys.sp_configure 'Ad Hoc Distributed Queries', 1;
 RECONFIGURE;
 
+-- Konfiguracja dostawców OLE DB (wymagane do zapytań ad-hoc i Linked Serverów)
+EXEC master.dbo.sp_MSsetdriverproperties @provider_name = N'OraOLEDB.Oracle', @property_name = N'AllowInProcess', @property_value = 1;
+EXEC master.dbo.sp_MSsetdriverproperties @provider_name = N'OraOLEDB.Oracle', @property_name = N'DynamicParameters', @property_value = 1;
+EXEC master.dbo.sp_MSsetdriverproperties @provider_name = N'Microsoft.ACE.OLEDB.12.0', @property_name = N'AllowInProcess', @property_value = 1;
+EXEC master.dbo.sp_MSsetdriverproperties @provider_name = N'Microsoft.ACE.OLEDB.12.0', @property_name = N'DynamicParameters', @property_value = 1;
+GO
+
 -- Reset bazy danych WarszawaHQ (tylko jeśli nie jest używana w replikacji)
 IF EXISTS (SELECT * FROM sys.databases WHERE name = 'WarszawaHQ')
 BEGIN
@@ -99,7 +106,7 @@ EXEC sys.sp_addlinkedserver
    @server = N'SQLSRV-REG',   
    @srvproduct = N'',
    @provider = N'MSOLEDBSQL',   
-   @datasrc = N'localhost\KRAKOW_HQ';
+   @datasrc = N'localhost\KrakowHQ';
 GO
 
 
