@@ -14,6 +14,8 @@ GO
 
 
 -- Symulacja replikacji migawkowej (Oracle -> SQLSRV-HQ)
+USE WarszawaHQ;
+GO
 
 -- Tabela repliki cennika
 IF OBJECT_ID('dbo.Cennik_Replica', 'U') IS NULL
