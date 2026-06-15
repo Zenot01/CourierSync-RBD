@@ -7,14 +7,7 @@ RECONFIGURE;
 EXEC sys.sp_configure 'Ad Hoc Distributed Queries', 1;
 RECONFIGURE;
 
--- Konfiguracja dostawców OLE DB (wymagane do zapytań ad-hoc i Linked Serverów)
-EXEC master.dbo.sp_MSsetdriverproperties @provider_name = N'OraOLEDB.Oracle', @property_name = N'AllowInProcess', @property_value = 1;
-EXEC master.dbo.sp_MSsetdriverproperties @provider_name = N'OraOLEDB.Oracle', @property_name = N'DynamicParameters', @property_value = 1;
-EXEC master.dbo.sp_MSsetdriverproperties @provider_name = N'Microsoft.ACE.OLEDB.12.0', @property_name = N'AllowInProcess', @property_value = 1;
-EXEC master.dbo.sp_MSsetdriverproperties @provider_name = N'Microsoft.ACE.OLEDB.12.0', @property_name = N'DynamicParameters', @property_value = 1;
-GO
-
--- Reset bazy danych WarszawaHQ (tylko jeśli nie jest używana w replikacji)
+-- Reset bazy danych WarszawaHQ
 IF EXISTS (SELECT * FROM sys.databases WHERE name = 'WarszawaHQ')
 BEGIN
     BEGIN TRY
@@ -117,11 +110,6 @@ EXEC sys.sp_addlinkedsrvlogin
    @rmtpassword = N'REGLinkedPassword123!';
 GO
 
--- RPC dla SQLSRV-REG
-EXEC sys.sp_serveroption @server=N'SQLSRV-REG', @optname=N'rpc', @optvalue=N'true';
-EXEC sys.sp_serveroption @server=N'SQLSRV-REG', @optname=N'rpc out', @optvalue=N'true';
-GO
-
 -- Test połączenia
 BEGIN TRY
     EXEC sys.sp_testlinkedserver N'SQLSRV-REG';
@@ -172,11 +160,6 @@ EXEC sys.sp_addlinkedsrvlogin
    @locallogin = NULL,   
    @rmtuser = N'COURIER_RO',          
    @rmtpassword = N'ROSecure123!';  
-GO
-
--- RPC dla ORA-ACCT
-EXEC sys.sp_serveroption @server=N'ORA-ACCT', @optname=N'rpc', @optvalue=N'true';
-EXEC sys.sp_serveroption @server=N'ORA-ACCT', @optname=N'rpc out', @optvalue=N'true';
 GO
 
 -- Test połączenia

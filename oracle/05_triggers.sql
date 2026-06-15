@@ -7,9 +7,9 @@ BEGIN
     INSERT INTO Faktury (numer_faktury, id_klienta, kwota_netto, kwota_vat, kwota_brutto, data_wystawienia)
     VALUES (
         :NEW.numer_faktury, 
-        -- Wyszukanie IdKlienta na zdalnym serwerze (pierwszy pasujący)
+        -- Wyszukanie IdKlienta na zdalnym serwerze
         (SELECT "IdKlienta" FROM "dbo"."Klienci"@hq_link_public WHERE "NazwaFirmy_ImieNazwisko" = :NEW.nazwa_klienta AND ROWNUM = 1),
-        ROUND(:NEW.kwota_brutto / 1.23, 2), -- Symulacja netto/vat
+        ROUND(:NEW.kwota_brutto / 1.23, 2), 
         ROUND(:NEW.kwota_brutto - (:NEW.kwota_brutto / 1.23), 2),
         :NEW.kwota_brutto,
         NVL(:NEW.data_wystawienia, SYSDATE)
