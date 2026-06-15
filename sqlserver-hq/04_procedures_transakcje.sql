@@ -10,7 +10,7 @@ CREATE OR ALTER PROCEDURE usp_PotwierdzDoreczenie
 AS
 BEGIN
     SET NOCOUNT ON;
-    SET XACT_ABORT ON; -- Wymagane dla transakcji rozproszonych
+    SET XACT_ABORT ON; 
 
     -- Pobranie danych przesyłki
     DECLARE @IdKlienta INT;
@@ -30,7 +30,7 @@ BEGIN
 
     IF @KwotaBrutto IS NULL OR @KwotaBrutto <= 0
     BEGIN
-        -- Wycena fallback
+        -- Wycena
         EXEC usp_WycenPrzesylke @IdPrzesylki = @IdPrzesylki;
         SELECT @KwotaBrutto = WyliczonaOplata FROM Przesylki WHERE IdPrzesylki = @IdPrzesylki;
     END
@@ -54,7 +54,7 @@ BEGIN
         SELECT TOP 1 @IdSortowni = IdSortowni FROM Sortownie;
     END
 
-    -- Start transakcji rozproszonej (MS DTC)
+    -- Start transakcji rozproszonej
     BEGIN DISTRIBUTED TRANSACTION;
 
     BEGIN TRY

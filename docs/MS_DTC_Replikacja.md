@@ -123,3 +123,37 @@ Subskrypcja definiuje odbiorcę (serwer regionalny) oraz bazę docelową:
 10. Wybierz opcję **Create the subscription(s)** i kliknij *Next*, a następnie **Finish**.
 
 Po zakończeniu kreatora, SQL Server Agent automatycznie uruchomi procesy generowania migawki i przeniesienia danych do bazy regionalnej.
+
+---
+
+## 5. Rozwiązywanie problemów (Troubleshooting) i awarie SQL Server
+
+### Błąd: "A transport-level error has occurred when receiving results..." (Potok został zakończony)
+Jeśli podczas uruchamiania procedury z transakcją rozproszoną (np. `usp_PotwierdzDoreczenie`) usługa SQL Server gwałtownie się wyłącza, a w programie SSMS pojawia się błąd o przerwaniu połączenia sieciowego (błąd 109, Shared Memory Provider), oznacza to **awarię procesu serwera bazodanowego**.
+
+#### Przyczyna:
+Sterownik OLE DB `OraOLEDB.Oracle` domyślnie próbuje załadować się wewnątrz pamięci SQL Server (`AllowInProcess = 1`). Jeśli na maszynie nie jest prawidłowo skonfigurowana usługa MS DTC w systemie Windows lub brakuje komponentu **Oracle Services for Microsoft Transaction Server (OraMTS)**, sterownik Oracle podczas próby rejestracji w transakcji generuje błąd ochrony pamięci (Access Violation), co powoduje natychmiastowe ubicie całej instancji SQL Server.
+
+#### Rozwiązanie (Izolacja procesu sterownika):
+Najbezpieczniejszym rozwiązaniem zapobiegającym awariom serwera jest uruchomienie dostawcy Oracle w osobnym procesie (out-of-process). Wtedy ewentualny błąd sterownika spowoduje jedynie zrzucenie błędu transakcji i wycofanie zmian, a nie wyłączenie serwera SQL:
+
+1. W SSMS rozwiń **Server Objects** -> **Linked Servers** -> **Providers**.
+2. Kliknij prawym przyciskiem myszy na **OraOLEDB.Oracle** i wybierz **Properties**.
+3. **Odznacz** opcję **Allow inprocess** (zezwól na uruchamianie w procesie).
+4. Zapisz zmiany.
+
+Można to również wykonać za pomocą T-SQL:
+```sql
+EXEC master.dbo.sp_MSset_oledb_prop N'OraOLEDB.Oracle', N'AllowInProcess', 0;
+```
+
+> [!NOTE]
+> Uruchomienie out-of-process sprawia, że błędy są poprawnie przechwytywane przez blok `TRY...CATCH` w skrypcie `06_example_usage.sql` i zamiast awarii bazy otrzymamy bezpieczny komunikat diagnostyczny:
+> `Uwaga: Blad podczas wywolania transakcji rozproszonej usp_PotwierdzDoreczenie.`
+
+#### Prawidłowa konfiguracja transakcji rozproszonej w Oracle:
+Jeśli chcesz, aby transakcje rozproszone z Oracle działały poprawnie (a nie tylko zwracały bezpieczny błąd), musisz:
+1. Zainstalować komponent **Oracle Services for MTS** podczas instalacji Oracle Client (instalator ODAC/Oracle Client). Komponent ten tworzy usługę systemową w Windows o nazwie `OracleMTSRecoveryService`.
+2. Upewnić się, że usługa `OracleMTSRecoveryService` jest uruchomiona.
+3. Włączyć obsługę transakcji XA w konfiguracji MS DTC (`Enable XA Transactions` w `dcomcnfg`).
+4. W takim docelowym środowisku produkcyjnym sterownik `OraOLEDB.Oracle` może wymagać powrotnego włączenia opcji `AllowInProcess` na `1`.

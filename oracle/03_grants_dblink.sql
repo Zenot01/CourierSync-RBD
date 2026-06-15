@@ -16,6 +16,15 @@ GRANT SELECT ON Faktury TO role_ro;
 GRANT SELECT ON Platnosci TO role_ro;
 GRANT SELECT ON RozliczeniaKurierskie TO role_ro;
 
+-- Uprawnienia do wykonywania procedur dla ról
+GRANT EXECUTE ON usp_WystawFakture TO role_app;
+GRANT EXECUTE ON usp_RozliczKuriera TO role_app;
+GRANT EXECUTE ON usp_GenerujRaportFinansowy TO role_app;
+
+GRANT EXECUTE ON usp_WystawFakture TO role_ro;
+GRANT EXECUTE ON usp_RozliczKuriera TO role_ro;
+GRANT EXECUTE ON usp_GenerujRaportFinansowy TO role_ro;
+
 -- role_rep: replikacja
 GRANT SELECT, INSERT, UPDATE, DELETE ON Cennik TO role_rep;
 GRANT SELECT, INSERT, UPDATE, DELETE ON Faktury TO role_rep;
@@ -31,6 +40,15 @@ GRANT SELECT ON Cennik TO COURIER_RO;
 GRANT SELECT ON Faktury TO COURIER_RO;
 GRANT SELECT ON Platnosci TO COURIER_RO;
 GRANT SELECT ON RozliczeniaKurierskie TO COURIER_RO;
+
+-- Bezpośrednie uprawnienia do wykonywania procedur dla użytkowników
+GRANT EXECUTE ON usp_WystawFakture TO COURIER_APP;
+GRANT EXECUTE ON usp_RozliczKuriera TO COURIER_APP;
+GRANT EXECUTE ON usp_GenerujRaportFinansowy TO COURIER_APP;
+
+GRANT EXECUTE ON usp_WystawFakture TO COURIER_RO;
+GRANT EXECUTE ON usp_RozliczKuriera TO COURIER_RO;
+GRANT EXECUTE ON usp_GenerujRaportFinansowy TO COURIER_RO;
 
 GRANT SELECT, INSERT, UPDATE, DELETE ON Cennik TO COURIER_REP;
 GRANT SELECT, INSERT, UPDATE, DELETE ON Faktury TO COURIER_REP;

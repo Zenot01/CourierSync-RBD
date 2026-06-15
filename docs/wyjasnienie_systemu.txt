@@ -225,7 +225,3 @@ dzięki czemu magazynierzy dokładnie wiedzą, w który sektor auta włożyć da
 * `usp_GenerujRaportFinansowy`
   - Co robi: Podsumowuje finanse firmy za dany okres.
   - Jak: Sumuje wszystkie wystawione faktury i płatności z podanego przedziału dat.
-
-================================================================================
-Koniec dokumentu. Mamy nadzieję, że teraz wszystko jest jasne! Powodzenia w nauce!
-================================================================================

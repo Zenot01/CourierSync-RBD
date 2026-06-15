@@ -15,7 +15,6 @@ BEGIN
     SET NOCOUNT ON;
 
     -- Sprawdzenie, czy takie same zdarzenie już zostało zapisane w bieżącym dniu
-    -- w celu uniknięcia naruszenia unikalnego indeksu UIDX_Zdarzenia_ZapobieganieDuplikatom
     IF NOT EXISTS (
         SELECT 1 
         FROM ZdarzeniaLogistyczne 

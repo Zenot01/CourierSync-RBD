@@ -1,9 +1,8 @@
 USE KrakowHQ;
 GO
 
--- =========================================================================
--- usp_OptymalizujTrase: Wyznacza optymalną trasę i generuje manifest (LIFO).
--- =========================================================================
+-- usp_OptymalizujTrase: Wyznacza optymalną trasę i generuje LIFO.
+
 CREATE OR ALTER PROCEDURE usp_OptymalizujTrase
     @IdKuriera INT
 AS
@@ -91,7 +90,7 @@ BEGIN
             ROW_NUMBER() OVER (ORDER BY KolejnoscRozladunku DESC) AS KolejnoscZaladunku
         FROM @Przesylki
     )
-    UPDATE @Przesylki
+    UPDATE p
     SET
         KolejnoscZaladunku = rp.KolejnoscZaladunku,
         SektorTira = CASE
@@ -120,7 +119,7 @@ BEGIN
     FROM @Przesylki
     ORDER BY KolejnoscZaladunku;
 
-    -- Pobranie i zwrócenie wygenerowanego manifestu
+    -- Pobranie i zwrócenie
     SELECT
         z.KolejnoscZaladunku                        AS [Lp. załadunku],
         z.IdPrzesylki                               AS [ID Przesyłki],

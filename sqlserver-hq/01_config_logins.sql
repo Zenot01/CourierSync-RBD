@@ -7,6 +7,13 @@ RECONFIGURE;
 EXEC sys.sp_configure 'Ad Hoc Distributed Queries', 1;
 RECONFIGURE;
 
+-- Konfiguracja dostawcy OLE DB dla Access/Excel (Microsoft.ACE.OLEDB.12.0)
+-- WAŻNE: Ten dostawca MUSI działać wewnątrz procesu (AllowInProcess = 1), inaczej zapytania zwrócą błąd interfejsu.
+-- Aby uniknąć awarii (crash) SQL Server, musisz mieć zainstalowany sterownik: AccessDatabaseEngine_X64.exe (wersja 64-bitowa).
+EXEC master.dbo.sp_MSset_oledb_prop N'Microsoft.ACE.OLEDB.12.0', N'AllowInProcess', 1;
+EXEC master.dbo.sp_MSset_oledb_prop N'Microsoft.ACE.OLEDB.12.0', N'DynamicParameters', 1;
+GO
+
 -- Reset bazy danych WarszawaHQ
 IF EXISTS (SELECT * FROM sys.databases WHERE name = 'WarszawaHQ')
 BEGIN
@@ -102,6 +109,11 @@ EXEC sys.sp_addlinkedserver
    @datasrc = N'localhost\KrakowHQ';
 GO
 
+-- Konfiguracja RPC dla SQLSRV-REG
+EXEC sys.sp_serveroption @server = N'SQLSRV-REG', @optname = N'rpc', @optvalue = N'true';
+EXEC sys.sp_serveroption @server = N'SQLSRV-REG', @optname = N'rpc out', @optvalue = N'true';
+GO
+
 
 EXEC sys.sp_addlinkedsrvlogin   
    @rmtsrvname = N'SQLSRV-REG',   
@@ -132,6 +144,11 @@ EXEC sys.sp_addlinkedserver
    @srvproduct = N'Oracle',   
    @provider = N'OraOLEDB.Oracle',   
    @datasrc = N'(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST=localhost)(PORT=1522))(CONNECT_DATA=(SERVER=DEDICATED)(SID=rbd2026)))';
+GO
+
+-- Konfiguracja RPC dla ORA-ACCT
+EXEC sys.sp_serveroption @server = N'ORA-ACCT', @optname = N'rpc', @optvalue = N'true';
+EXEC sys.sp_serveroption @server = N'ORA-ACCT', @optname = N'rpc out', @optvalue = N'true';
 GO
 
 -- Mapowanie loginów na role w Oracle

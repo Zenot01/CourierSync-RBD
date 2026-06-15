@@ -30,6 +30,8 @@ AS
 BEGIN
     SET NOCOUNT ON;
 
+    DECLARE @Sql NVARCHAR(MAX);
+    SET @Sql = N'
     SELECT 
         k.IdKlienta,
         k.NazwaFirmy_ImieNazwisko,
@@ -50,14 +52,16 @@ BEGIN
     -- Dane zdalne Oracle przez Linked Server
     LEFT JOIN [ORA-ACCT]..[COURIER_ADMIN].[FAKTURY] f 
         ON p.IdPrzesylki = f.id_przesylki 
-        AND f.data_wystawienia BETWEEN @DataOd AND @DataDo
+        AND f.data_wystawienia BETWEEN @DataOdInner AND @DataDoInner
     -- Dane zdalne Access przez Linked Server
     LEFT JOIN [ACC-LOCAL]...Nadania a 
         ON k.IdKlienta = a.IdKlienta 
-        AND a.DataNadania BETWEEN @DataOd AND @DataDo
+        AND a.DataNadania BETWEEN @DataOdInner AND @DataDoInner
     -- Dane zdalne Excel przez Linked Server
     LEFT JOIN [XLS-RAPORTY]...[Sheet1$] e 
-        ON e.Miesiac = CONVERT(VARCHAR(7), @DataOd, 120)
-    GROUP BY k.IdKlienta, k.NazwaFirmy_ImieNazwisko;
+        ON e.Miesiac = CONVERT(VARCHAR(7), @DataOdInner, 120)
+    GROUP BY k.IdKlienta, k.NazwaFirmy_ImieNazwisko;';
+
+    EXEC sp_executesql @Sql, N'@DataOdInner DATETIME, @DataDoInner DATETIME', @DataOdInner = @DataOd, @DataDoInner = @DataDo;
 END;
 GO

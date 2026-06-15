@@ -7,9 +7,19 @@ GO
 IF EXISTS (SELECT * FROM sys.databases WHERE name = 'KrakowHQ')
 BEGIN
     BEGIN TRY
-        -- Sprawdzamy czy baza jest subskrybentem replikacji
-        IF OBJECT_ID('KrakowHQ.sys.subscriptions') IS NULL 
-           OR NOT EXISTS (SELECT 1 FROM KrakowHQ.sys.subscriptions)
+        -- Sprawdzamy czy baza jest subskrybentem replikacji przy użyciu dynamicznego SQL
+        DECLARE @IsSubscriber INT = 0;
+        
+        IF OBJECT_ID('KrakowHQ.sys.subscriptions') IS NOT NULL
+        BEGIN
+            EXEC sp_executesql N'
+                IF EXISTS (SELECT 1 FROM KrakowHQ.sys.subscriptions)
+                    SET @IsSubInner = 1;',
+                N'@IsSubInner INT OUTPUT',
+                @IsSubInner = @IsSubscriber OUTPUT;
+        END
+
+        IF @IsSubscriber = 0
         BEGIN
             ALTER DATABASE KrakowHQ SET SINGLE_USER WITH ROLLBACK IMMEDIATE;
             DROP DATABASE KrakowHQ;
@@ -80,6 +90,10 @@ BEGIN
 END
 GO
 
+-- Uprawnienia do wykonywania procedur składowanych przez serwer centralny
+GRANT EXECUTE TO COURIER_LINKED_HQ;
+GO
+
 
 USE [master];
 GO
@@ -96,6 +110,11 @@ EXEC sys.sp_addlinkedserver
    @srvproduct = N'',
    @provider = N'MSOLEDBSQL',   
    @datasrc = N'localhost';
+GO
+
+-- Konfiguracja RPC dla SQLSRV-HQ
+EXEC sys.sp_serveroption @server = N'SQLSRV-HQ', @optname = N'rpc', @optvalue = N'true';
+EXEC sys.sp_serveroption @server = N'SQLSRV-HQ', @optname = N'rpc out', @optvalue = N'true';
 GO
 
 
