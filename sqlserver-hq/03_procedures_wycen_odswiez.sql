@@ -1,8 +1,6 @@
 USE WarszawaHQ;
 GO
 
--- Procedury (Warszawa)
-
 -- usp_WycenPrzesylke: Oblicza opłatę na podstawie typu przesyłki oraz wagi i zapisuje ją.
 CREATE OR ALTER PROCEDURE usp_WycenPrzesylke
     @IdPrzesylki INT
@@ -71,32 +69,24 @@ BEGIN
         -- Test połączenia
         EXEC sys.sp_testlinkedserver N'ACC-LOCAL';
 
-        -- Import nowych zamówień przy użyciu dynamicznego SQL
-        DECLARE @SqlInsert NVARCHAR(MAX);
-        SET @SqlInsert = N'
+        -- Import nowych zamówień
         INSERT INTO Zamowienia (IdKlienta, DataZlozenia, StatusZamowienia)
         SELECT 
             src.IdKlienta,
             src.DataNadania,
-            ''PRZYJETE''
-        FROM OPENQUERY([ACC-LOCAL], ''SELECT IdNadania, IdKlienta, DataNadania, Zaimportowane FROM Nadania WHERE Zaimportowane = 0'') src
-        WHERE src.DataNadania >= @DataGranicznaInner
+            'PRZYJETE'
+        FROM OPENQUERY([ACC-LOCAL], 'SELECT IdNadania, IdKlienta, DataNadania, Zaimportowane FROM Nadania WHERE Zaimportowane = 0') src
+        WHERE src.DataNadania >= @DataGraniczna
           AND NOT EXISTS (
               SELECT 1 
               FROM Zamowienia z 
               WHERE z.IdKlienta = src.IdKlienta 
                 AND z.DataZlozenia = src.DataNadania
-          );';
+          );
 
-        EXEC sp_executesql @SqlInsert, N'@DataGranicznaInner DATETIME', @DataGranicznaInner = @DataGraniczna;
-
-        -- Oznaczenie w Access jako zaimportowane przy użyciu dynamicznego SQL
-        DECLARE @SqlUpdate NVARCHAR(MAX);
-        SET @SqlUpdate = N'
-        UPDATE OPENQUERY([ACC-LOCAL], ''SELECT Zaimportowane FROM Nadania WHERE Zaimportowane = 0'')
-        SET Zaimportowane = 1;';
-
-        EXEC sp_executesql @SqlUpdate;
+        -- Oznaczenie w Access jako zaimportowane
+        UPDATE OPENQUERY([ACC-LOCAL], 'SELECT Zaimportowane FROM Nadania WHERE Zaimportowane = 0')
+        SET Zaimportowane = 1;
 
         PRINT 'Pomyślnie zaimportowano zamówienia z bazy Access.';
     END TRY
