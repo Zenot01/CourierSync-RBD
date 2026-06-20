@@ -17,6 +17,7 @@ SPIS TREŚCI:
 3. Droga paczki: Zwrot (Co gdy paczka nie dojdzie?)
 4. Optymalizacja trasy kuriera (Zasada LIFO i sektory w samochodzie)
 5. Słowniczek procedur (Co robi każda procedura po ludzku)
+6. Role, użytkownicy i uprawnienia (Kto co może zrobić w bazach)
 --------------------------------------------------------------------------------
 
 
@@ -225,3 +226,88 @@ dzięki czemu magazynierzy dokładnie wiedzą, w który sektor auta włożyć da
 * `usp_GenerujRaportFinansowy`
   - Co robi: Podsumowuje finanse firmy za dany okres.
   - Jak: Sumuje wszystkie wystawione faktury i płatności z podanego przedziału dat.
+
+
+================================================================================
+6. ROLE, UŻYTKOWNICY I UPRAWNIENIA (KTO CO MOŻE ROBIĆ W BAZACH)
+================================================================================
+
+Każda z baz danych posiada zdefiniowane konta i uprawnienia, aby zapewnić 
+bezpieczeństwo danych i ograniczyć dostęp zgodnie z zasadą minimalnych uprawnień.
+
+=== A. BAZA WARSZAWA (SQL Server - Centrala) ===
+
+W bazie centralnej uprawnienia są oparte na wbudowanych rolach SQL Server. 
+Połączenie z bazą odbywa się za pomocą loginów serwerowych, które są mapowane 
+na użytkowników bazy WarszawaHQ:
+
+1. CentralAdminLogin (Użytkownik bazy: COURIER_HQ_ADMIN)
+   * Rola: db_owner
+   * Co może robić: Pełne uprawnienia administratora w bazie centralnej. Może 
+     tworzyć/usuwać tabele, procedury i konfigurować system.
+   * Użycie: Służy do zarządzania bazą i wykonywania skryptów wdrożeniowych.
+
+2. AppCentralLogin (Użytkownik bazy: COURIER_HQ_APP)
+   * Role: db_datareader, db_datawriter
+   * Co może robić: Odczyt i zapis danych we wszystkich tabelach. Nie ma 
+     uprawnień do zmiany struktury bazy (np. usuwania tabel).
+   * Użycie: Główne konto używane przez aplikację centralną do codziennej pracy 
+     (rejestracja paczek, zmiana statusów).
+
+
+=== B. BAZA KRAKÓW (SQL Server - Oddział Regionalny) ===
+
+Podobnie jak w centrali, w Krakowie bezpieczeństwo kontrolują loginy serwera 
+oraz użytkownicy bazy KrakowHQ:
+
+1. RegionalAdminLogin (Użytkownik bazy: COURIER_REG_ADMIN)
+   * Rola: db_owner
+   * Co może robić: Pełny dostęp administracyjny do bazy regionalnej w Krakowie.
+   * Użycie: Zarządzanie oddziałem regionalnym.
+
+2. LinkedServerLogin (Użytkownik bazy: COURIER_LINKED_HQ)
+   * Role: db_datareader, db_datawriter + uprawnienie EXECUTE
+   * Co może robić: Odczyt i modyfikacja danych w tabelach Krakowa oraz uruchamianie 
+     procedur składowanych (GRANT EXECUTE).
+   * Użycie: Służy do komunikacji z Warszawy do Krakowa przez Linked Server. Centrala 
+     używa tego konta do wywoływania procedur logistycznych w oddziale.
+
+
+=== C. BAZA ORA-ACCT (Oracle - Finanse/Księgowość) ===
+
+W bazie Oracle wdrożono dedykowane role systemowe i obiektowe, które przypisano 
+poszczególnym użytkownikom:
+
+1. Rola: role_admin (Użytkownik: COURIER_ADMIN)
+   * Uprawnienia systemowe: CREATE SESSION, CREATE TABLE, CREATE VIEW, CREATE TRIGGER, 
+     CREATE PROCEDURE, CREATE DATABASE LINK, CREATE PUBLIC DATABASE LINK, DROP PUBLIC DATABASE LINK, 
+     UNLIMITED TABLESPACE.
+   * Uprawnienia obiektowe: Pełny dostęp (ALL PRIVILEGES) do tabel: Cennik, Faktury, 
+     Platnosci, RozliczeniaKurierskie.
+   * Użycie: Administrator systemu finansowego Oracle.
+
+2. Rola: role_app (Użytkownik: COURIER_APP)
+   * Uprawnienia systemowe: CREATE SESSION (logowanie).
+   * Uprawnienia obiektowe:
+     - Zapis i odczyt (SELECT, INSERT, UPDATE) dla tabel: Faktury, Platnosci.
+     - Tylko odczyt (SELECT) dla tabeli: Cennik.
+     - Wykonywanie (EXECUTE) procedur: usp_WystawFakture, usp_RozliczKuriera, usp_GenerujRaportFinansowy.
+   * Użycie: Połączenie z SQL Server do Oracle (np. wystawianie faktur przy doręczeniu paczki).
+
+3. Rola: role_ro (Użytkownik: COURIER_RO)
+   * Uprawnienia systemowe: CREATE SESSION.
+   * Uprawnienia obiektowe:
+     - Tylko odczyt (SELECT) dla tabel: Cennik, Faktury, Platnosci, RozliczeniaKurierskie.
+     - Wykonywanie (EXECUTE) procedur: usp_WystawFakture, usp_RozliczKuriera, usp_GenerujRaportFinansowy.
+   * Użycie: Dostęp tylko do odczytu (np. raportowanie, podgląd danych).
+
+4. Rola: role_rep (Użytkownik: COURIER_REP)
+   * Uprawnienia systemowe: CREATE SESSION.
+   * Uprawnienia obiektowe: Pełny dostęp DML (SELECT, INSERT, UPDATE, DELETE) do wszystkich 
+     głównych tabel w celu synchronizacji danych.
+   * Użycie: Wykorzystywane przez mechanizm replikacji.
+
+5. Rola: role_audit (Użytkownik: COURIER_AUDIT)
+   * Uprawnienia systemowe: CREATE SESSION.
+   * Uprawnienia obiektowe: Dostęp tylko do widoków audytowych.
+   * Użycie: Kontrola i audyt finansowy.
